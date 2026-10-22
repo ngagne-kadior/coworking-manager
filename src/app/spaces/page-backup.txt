@@ -1,0 +1,234 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
+type Space = {
+  id: string;
+  name: string;
+  description: string | null;
+  capacity: number;
+  is_active: boolean;
+};
+
+export default function SpacesPage() {
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [capacity, setCapacity] = useState("1");
+
+  const loadSpaces = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const { data, error } = await supabase
+        .from("spaces")
+        .select("id, name, description, capacity, is_active")
+        .order("name");
+
+      if (error) {
+        setError(`Impossible de charger les espaces : ${error.message}`);
+        return;
+      }
+
+      setSpaces(data ?? []);
+    } catch {
+      setError("Une erreur est survenue pendant le chargement.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSpaces();
+  }, [loadSpaces]);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    const trimmedName = name.trim();
+    const parsedCapacity = Number(capacity);
+
+    if (!trimmedName) {
+      setError("Le nom de l'espace est obligatoire.");
+      return;
+    }
+
+    if (!Number.isInteger(parsedCapacity) || parsedCapacity < 1) {
+      setError("La capacité doit être un nombre entier supérieur à zéro.");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("spaces")
+        .insert({
+          name: trimmedName,
+          description: description.trim() || null,
+          capacity: parsedCapacity,
+          is_active: true,
+        })
+        .select("id, name, description, capacity, is_active")
+        .single();
+
+      if (error) {
+        setError(`Impossible d'ajouter l'espace : ${error.message}`);
+        return;
+      }
+
+      setSpaces((current) =>
+        [...current, data].sort((a, b) => a.name.localeCompare(b.name))
+      );
+
+      setName("");
+      setDescription("");
+      setCapacity("1");
+      setSuccess("L'espace a été ajouté avec succès.");
+    } catch {
+      setError("Une erreur est survenue pendant l'ajout.");
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 p-6 text-slate-900 md:p-10">
+      <div className="mx-auto max-w-5xl">
+        <header>
+          <h1 className="text-3xl font-bold">Espaces</h1>
+          <p className="mt-2 text-slate-600">
+            Gère les bureaux, salles et autres espaces de coworking.
+          </p>
+        </header>
+
+        {error && (
+          <p role="alert" className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        {success && (
+          <p role="status" className="mt-6 rounded-lg bg-green-50 p-4 text-sm text-green-700">
+            {success}
+          </p>
+        )}
+
+        <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-semibold">Ajouter un espace</h2>
+
+          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+            <div>
+              <label htmlFor="spaceName" className="mb-1 block text-sm font-medium">
+                Nom de l'espace *
+              </label>
+              <input
+                id="spaceName"
+                required
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Ex. Salle de réunion A"
+                className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="spaceDescription" className="mb-1 block text-sm font-medium">
+                Description
+              </label>
+              <textarea
+                id="spaceDescription"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Description de l'espace"
+                rows={3}
+                className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="spaceCapacity" className="mb-1 block text-sm font-medium">
+                Capacité maximale *
+              </label>
+              <input
+                id="spaceCapacity"
+                type="number"
+                min="1"
+                step="1"
+                required
+                value={capacity}
+                onChange={(event) => setCapacity(event.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800"
+            >
+              Ajouter l'espace
+            </button>
+          </form>
+        </section>
+
+        <section className="mt-8">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-xl font-semibold">
+              Liste des espaces ({spaces.length})
+            </h2>
+
+            <button
+              type="button"
+              onClick={() => void loadSpaces()}
+              disabled={loading}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm disabled:opacity-60"
+            >
+              Actualiser
+            </button>
+          </div>
+
+          {loading && (
+            <p className="mt-4 text-slate-600">Chargement des espaces...</p>
+          )}
+
+          {!loading && !error && spaces.length === 0 && (
+            <p className="mt-4 rounded-lg border border-slate-200 bg-white p-6 text-slate-600">
+              Aucun espace enregistré pour le moment.
+            </p>
+          )}
+
+          {!loading && spaces.length > 0 && (
+            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-100 text-slate-600">
+                  <tr>
+                    <th className="p-4">Nom</th>
+                    <th className="p-4">Description</th>
+                    <th className="p-4">Capacité</th>
+                    <th className="p-4">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {spaces.map((space) => (
+                    <tr key={space.id} className="border-t border-slate-100">
+                      <td className="p-4 font-medium">{space.name}</td>
+                      <td className="p-4">{space.description || "—"}</td>
+                      <td className="p-4">{space.capacity} personne(s)</td>
+                      <td className="p-4">
+                        {space.is_active ? "Actif" : "Inactif"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
