@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import LogoutButton from "@/components/LogoutButton";
 
 type Member = {
   id: string;
@@ -358,14 +359,17 @@ export default function ReservationsPage() {
     <main className="min-h-screen bg-slate-50 p-5 text-slate-900 md:p-10">
       <div className="mx-auto max-w-7xl">
         <header>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <button
   type="button"
   onClick={() => router.push("/")}
-  className="mb-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
+  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
 >
   <span className="text-lg">←</span>
   Tableau de bord
         </button>
+            <LogoutButton />
+          </div>
           <h1 className="text-3xl font-bold">Réservations</h1>
           <p className="mt-2 text-slate-600">
             Crée et gère les réservations des espaces de coworking.

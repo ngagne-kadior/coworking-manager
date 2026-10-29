@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import LogoutButton from "@/components/LogoutButton";
 
 type Member = {
   id: string;
@@ -369,9 +370,7 @@ export default function Home() {
               {loading ? "Chargement..." : "↻ Actualiser"}
             </button>
 
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
-              AD
-            </div>
+            <LogoutButton className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50" />
           </div>
         </header>
 
