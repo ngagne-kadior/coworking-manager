@@ -220,7 +220,7 @@ export default function ReservationsPage() {
           space_id: spaceId,
           start_at: startISO,
           end_at: endISO,
-          status: "pending",
+          status: "confirmed",
           notes: notes.trim() || null,
         })
         .select("id")
@@ -241,7 +241,7 @@ export default function ReservationsPage() {
       }
 
       setSuccess(
-        "Réservation créée. Elle est en attente de confirmation et expirera automatiquement après une heure."
+        "Réservation créée et confirmée."
       );
 
       setStartAt("");
@@ -562,7 +562,6 @@ export default function ReservationsPage() {
                     <th className="p-4">Début</th>
                     <th className="p-4">Fin</th>
                     <th className="p-4">Statut</th>
-                    <th className="p-4">Date limite</th>
                     <th className="p-4">Notes</th>
                     <th className="p-4">Actions</th>
                   </tr>
@@ -609,11 +608,6 @@ export default function ReservationsPage() {
                               ? "Expirée"
                               : statusLabels[reservation.status]}
                           </span>
-                        </td>
-                        <td className="p-4">
-                          {reservation.expires_at
-                            ? formatDate(reservation.expires_at)
-                            : "—"}
                         </td>
                         <td className="max-w-xs p-4">
                           {reservation.notes || "—"}

@@ -577,7 +577,7 @@ export default function Home() {
                   Prochaines réservations
                 </h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  Les prochaines demandes et réservations confirmées
+                  Les prochaines réservations confirmées
                 </p>
               </div>
               <button
