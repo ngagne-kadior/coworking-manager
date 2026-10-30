@@ -57,6 +57,7 @@ const navigation = [
   { label: "Espaces", icon: "▤", path: "/spaces" },
   { label: "Réservations", icon: "▣", path: "/reservations" },
   { label: "Historique", icon: "◷", path: "/historique" },
+  { label: "Comptes", icon: "⚿", path: "/utilisateurs" },
 ];
 
 function startOfDay() {
@@ -780,7 +781,7 @@ export default function Home() {
           </footer>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-5 border-t border-slate-200 bg-white px-1 py-2 lg:hidden">
+        <div className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-6 border-t border-slate-200 bg-white px-1 py-2 lg:hidden">
           {navigation.map((item) => (
             <button
               key={item.path}

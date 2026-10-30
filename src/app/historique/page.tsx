@@ -56,6 +56,7 @@ const ACTION_LABELS: Record<string, string> = {
   deactivate: "Désactivation",
   status: "Changement de statut",
   delete: "Suppression",
+  password_reset: "Mot de passe réinitialisé",
 };
 
 const ACTION_STYLES: Record<string, string> = {
@@ -65,6 +66,7 @@ const ACTION_STYLES: Record<string, string> = {
   deactivate: "bg-amber-50 text-amber-700",
   status: "bg-violet-50 text-violet-700",
   delete: "bg-red-50 text-red-700",
+  password_reset: "bg-orange-50 text-orange-700",
 };
 
 const FIELD_LABELS: Record<string, string> = {
