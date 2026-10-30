@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import LogoutButton from "@/components/LogoutButton";
 
 type Member = {
   id: string;
@@ -55,6 +56,7 @@ const navigation = [
   { label: "Membres", icon: "♙", path: "/members" },
   { label: "Espaces", icon: "▤", path: "/spaces" },
   { label: "Réservations", icon: "▣", path: "/reservations" },
+  { label: "Historique", icon: "◷", path: "/historique" },
 ];
 
 function startOfDay() {
@@ -369,9 +371,7 @@ export default function Home() {
               {loading ? "Chargement..." : "↻ Actualiser"}
             </button>
 
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
-              AD
-            </div>
+            <LogoutButton className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50" />
           </div>
         </header>
 
@@ -578,7 +578,7 @@ export default function Home() {
                   Prochaines réservations
                 </h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  Les prochaines demandes et réservations confirmées
+                  Les prochaines réservations confirmées
                 </p>
               </div>
               <button
@@ -780,7 +780,7 @@ export default function Home() {
           </footer>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-4 border-t border-slate-200 bg-white px-1 py-2 lg:hidden">
+        <div className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-5 border-t border-slate-200 bg-white px-1 py-2 lg:hidden">
           {navigation.map((item) => (
             <button
               key={item.path}

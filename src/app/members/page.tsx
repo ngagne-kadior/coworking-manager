@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import LogoutButton from "@/components/LogoutButton";
 
 type Member = {
   id: string;
@@ -439,6 +440,8 @@ export default function MembersPage() {
             >
               Retour au tableau de bord
             </a>
+
+            <LogoutButton />
           </div>
         </header>
 
