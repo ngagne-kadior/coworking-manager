@@ -14,8 +14,10 @@ import {
   type PaymentMethod,
 } from "@/lib/payments";
 
+export type PaymentTarget = { kind: "reservation" | "subscription"; id: string };
+
 type Props = {
-  reservationId: string;
+  target: PaymentTarget;
   memberId: string;
   price: number | null;
   /** Montant proposé d'après les tarifs, si le montant dû n'est pas encore défini */
@@ -27,8 +29,8 @@ type Props = {
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600";
 
-/** Montant dû, encaissements et saisie d'un paiement pour une réservation. */
-export default function PaymentPanel({ reservationId, memberId, price, suggestedPrice, canPay, onChanged }: Props) {
+/** Montant dû, encaissements et saisie d'un paiement (réservation ou abonnement). */
+export default function PaymentPanel({ target, memberId, price, suggestedPrice, canPay, onChanged }: Props) {
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [currentPrice, setCurrentPrice] = useState(price);
@@ -48,7 +50,7 @@ export default function PaymentPanel({ reservationId, memberId, price, suggested
     supabase
       .from("payments")
       .select("id, reservation_id, member_id, amount, method, paid_at, note")
-      .eq("reservation_id", reservationId)
+      .eq(target.kind === "reservation" ? "reservation_id" : "subscription_id", target.id)
       .order("paid_at")
       .then(({ data, error: loadError }) => {
         if (!active) return;
@@ -58,7 +60,7 @@ export default function PaymentPanel({ reservationId, memberId, price, suggested
     return () => {
       active = false;
     };
-  }, [reservationId, refresh]);
+  }, [target.kind, target.id, refresh]);
 
   const paid = sumPayments(payments);
   const remaining = currentPrice === null ? null : Math.max(currentPrice - paid, 0);
@@ -73,9 +75,9 @@ export default function PaymentPanel({ reservationId, memberId, price, suggested
     }
     setBusy(true);
     const { error: updateError } = await supabase
-      .from("reservations")
+      .from(target.kind === "reservation" ? "reservations" : "subscriptions")
       .update({ price_amount: value })
-      .eq("id", reservationId);
+      .eq("id", target.id);
     setBusy(false);
     if (updateError) {
       setError(updateError.message);
@@ -96,7 +98,8 @@ export default function PaymentPanel({ reservationId, memberId, price, suggested
     }
     setBusy(true);
     const { error: insertError } = await supabase.from("payments").insert({
-      reservation_id: reservationId,
+      reservation_id: target.kind === "reservation" ? target.id : null,
+      subscription_id: target.kind === "subscription" ? target.id : null,
       member_id: memberId,
       amount,
       method,

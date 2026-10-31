@@ -27,6 +27,29 @@ type Booking = {
   payments: { amount: number }[] | null;
 };
 
+type SubscriptionDue = {
+  id: string;
+  member_id: string;
+  plan_name: string;
+  price_amount: number | null;
+  ends_on: string | null;
+  members: { full_name: string; photo_path: string | null } | null;
+  spaces: { name: string } | null;
+  payments: { amount: number }[] | null;
+};
+
+/** Élément à encaisser : une réservation ou un abonnement. */
+type DueItem = {
+  kind: "reservation" | "subscription";
+  id: string;
+  memberId: string;
+  name: string;
+  photo: string | null;
+  detail: string;
+  price: number | null;
+  paid: number;
+};
+
 type PaymentRow = {
   id: string;
   amount: number;
@@ -35,9 +58,15 @@ type PaymentRow = {
   note: string | null;
   members: { full_name: string; photo_path: string | null } | null;
   reservations: { start_at: string; spaces: { name: string } | null } | null;
+  subscriptions: { plan_name: string; spaces: { name: string } | null } | null;
 };
 
-type LoadResult = { bookings: Booking[]; payments: PaymentRow[]; error: string };
+type LoadResult = {
+  bookings: Booking[];
+  subscriptions: SubscriptionDue[];
+  payments: PaymentRow[];
+  error: string;
+};
 
 function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -64,7 +93,7 @@ async function load(month: string): Promise<LoadResult> {
   const end = new Date(start);
   end.setMonth(end.getMonth() + 1);
 
-  const [bookingRes, paymentRes] = await Promise.all([
+  const [bookingRes, paymentRes, subRes] = await Promise.all([
     supabase
       .from("reservations")
       .select(
@@ -76,16 +105,21 @@ async function load(month: string): Promise<LoadResult> {
     supabase
       .from("payments")
       .select(
-        "id, amount, method, paid_at, note, members(full_name, photo_path), reservations(start_at, spaces(name))"
+        "id, amount, method, paid_at, note, members(full_name, photo_path), reservations(start_at, spaces(name)), subscriptions(plan_name, spaces(name))"
       )
       .gte("paid_at", start.toISOString())
       .lt("paid_at", end.toISOString())
       .order("paid_at", { ascending: false }),
+    supabase
+      .from("subscriptions")
+      .select("id, member_id, plan_name, price_amount, ends_on, members(full_name, photo_path), spaces(name), payments(amount)")
+      .eq("status", "active"),
   ]);
 
-  const error = bookingRes.error ?? paymentRes.error;
+  const error = bookingRes.error ?? paymentRes.error ?? subRes.error;
   return {
     bookings: (bookingRes.data ?? []) as unknown as Booking[],
+    subscriptions: (subRes.data ?? []) as unknown as SubscriptionDue[],
     payments: (paymentRes.data ?? []) as unknown as PaymentRow[],
     error: error ? `Impossible de charger les paiements : ${error.message}` : "",
   };
@@ -98,7 +132,7 @@ export default function PaiementsPage() {
   const [requestId, setRequestId] = useState(1);
   const [loadedId, setLoadedId] = useState(0);
   const [result, setResult] = useState<LoadResult | null>(null);
-  const [open, setOpen] = useState<Booking | null>(null);
+  const [open, setOpen] = useState<DueItem | null>(null);
 
   const loading = loadedId !== requestId;
 
@@ -115,25 +149,52 @@ export default function PaiementsPage() {
   }, [month, requestId]);
 
   const bookings = useMemo(() => result?.bookings ?? [], [result]);
+  const subscriptions = useMemo(() => result?.subscriptions ?? [], [result]);
   const payments = useMemo(() => result?.payments ?? [], [result]);
+
+  const dueItems = useMemo<DueItem[]>(
+    () => [
+      ...subscriptions.map((sub) => ({
+        kind: "subscription" as const,
+        id: sub.id,
+        memberId: sub.member_id,
+        name: sub.members?.full_name ?? "Membre",
+        photo: sub.members?.photo_path ?? null,
+        detail: `Abonnement « ${sub.plan_name} » · ${sub.spaces?.name ?? "Espace"}${
+          sub.ends_on ? ` · jusqu'au ${new Date(`${sub.ends_on}T00:00:00`).toLocaleDateString("fr-FR")}` : ""
+        }`,
+        price: sub.price_amount,
+        paid: sumPayments(sub.payments),
+      })),
+      ...bookings.map((b) => ({
+        kind: "reservation" as const,
+        id: b.id,
+        memberId: b.member_id,
+        name: b.members?.full_name ?? "Membre",
+        photo: b.members?.photo_path ?? null,
+        detail: `${b.spaces?.name ?? "Espace"} · ${formatSlot(b.start_at, b.end_at)}`,
+        price: b.price_amount,
+        paid: sumPayments(b.payments),
+      })),
+    ],
+    [bookings, subscriptions]
+  );
 
   const toCollect = useMemo(
     () =>
-      bookings
-        .map((b) => ({ booking: b, paid: sumPayments(b.payments) }))
-        .filter(({ booking, paid }) => {
-          const state = paymentState(booking.price_amount, paid);
-          return state === "unpaid" || state === "partial" || (showUnpriced && state === "none");
-        }),
-    [bookings, showUnpriced]
+      dueItems.filter((item) => {
+        const state = paymentState(item.price, item.paid);
+        return state === "unpaid" || state === "partial" || (showUnpriced && state === "none");
+      }),
+    [dueItems, showUnpriced]
   );
 
   const totalReceived = sumPayments(payments);
-  const totalRemaining = bookings.reduce(
-    (total, b) => total + Math.max((b.price_amount ?? 0) - sumPayments(b.payments), 0),
+  const totalRemaining = dueItems.reduce(
+    (total, item) => total + Math.max((item.price ?? 0) - item.paid, 0),
     0
   );
-  const unpricedCount = bookings.filter((b) => b.price_amount === null).length;
+  const unpricedCount = dueItems.filter((item) => item.price === null).length;
   const byMethod = (Object.keys(METHOD_LABELS) as PaymentMethod[]).map((method) => ({
     method,
     total: sumPayments(payments.filter((p) => p.method === method)),
@@ -144,7 +205,7 @@ export default function PaiementsPage() {
       <div className="mx-auto max-w-7xl">
         <PageHeader
           title="Paiements"
-          description="Encaissements, montants restant dus et réservations sans montant."
+          description="Encaissements des réservations et des abonnements, et montants restant dus."
           actions={
             <label className="flex items-center gap-2 text-sm">
               <span className="text-slate-600">Mois</span>
@@ -182,10 +243,10 @@ export default function PaiementsPage() {
             <p className="mt-2 text-2xl font-bold text-amber-700">
               {loading && !result ? "—" : formatFCFA(totalRemaining)}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Réservations confirmées ou terminées</p>
+            <p className="mt-1 text-xs text-slate-400">Réservations et abonnements en cours</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Réservations sans montant</p>
+            <p className="text-sm text-slate-500">Sans montant défini</p>
             <p className="mt-2 text-2xl font-bold text-slate-700">{loading && !result ? "—" : unpricedCount}</p>
             <p className="mt-1 text-xs text-slate-400">Montant dû à définir</p>
           </div>
@@ -230,7 +291,7 @@ export default function PaiementsPage() {
                 onChange={(e) => setShowUnpriced(e.target.checked)}
                 className="h-4 w-4"
               />
-              Afficher aussi les réservations sans montant
+              Afficher aussi ce qui n&apos;a pas de montant
             </label>
           )}
         </div>
@@ -243,35 +304,37 @@ export default function PaiementsPage() {
               <p className="p-6 text-sm text-slate-500">Rien à encaisser. Tout est à jour.</p>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {toCollect.map(({ booking, paid }) => {
-                  const name = booking.members?.full_name ?? "Membre";
-                  const state = paymentState(booking.price_amount, paid);
+                {toCollect.map((item) => {
+                  const state = paymentState(item.price, item.paid);
                   return (
-                    <li key={booking.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+                    <li key={`${item.kind}-${item.id}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <Avatar name={name} photoPath={booking.members?.photo_path} size="md" />
+                        <Avatar name={item.name} photoPath={item.photo} size="md" />
                         <div className="min-w-0">
-                          <p className="truncate font-semibold">{name}</p>
-                          <p className="truncate text-sm text-slate-500">
-                            {booking.spaces?.name ?? "Espace"} · {formatSlot(booking.start_at, booking.end_at)}
-                          </p>
+                          <p className="truncate font-semibold">{item.name}</p>
+                          <p className="truncate text-sm text-slate-500">{item.detail}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 sm:justify-end">
+                      <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                        {item.kind === "subscription" && (
+                          <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">
+                            Abonnement
+                          </span>
+                        )}
                         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATE_STYLES[state]}`}>
                           {STATE_LABELS[state]}
                         </span>
-                        {booking.price_amount !== null && (
+                        {item.price !== null && (
                           <span className="text-sm font-semibold text-amber-700">
-                            Reste {formatFCFA(booking.price_amount - paid)}
+                            Reste {formatFCFA(item.price - item.paid)}
                           </span>
                         )}
                         <button
                           type="button"
-                          onClick={() => setOpen(booking)}
+                          onClick={() => setOpen(item)}
                           className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
                         >
-                          {booking.price_amount === null ? "Définir le montant" : "Encaisser"}
+                          {item.price === null ? "Définir le montant" : "Encaisser"}
                         </button>
                       </div>
                     </li>
@@ -288,7 +351,7 @@ export default function PaiementsPage() {
                   <tr>
                     <th className="p-4">Date</th>
                     <th className="p-4">Membre</th>
-                    <th className="p-4">Réservation</th>
+                    <th className="p-4">Objet</th>
                     <th className="p-4">Moyen</th>
                     <th className="p-4 text-right">Montant</th>
                   </tr>
@@ -308,7 +371,9 @@ export default function PaiementsPage() {
                       <td className="p-4 text-slate-600">
                         {p.reservations
                           ? `${p.reservations.spaces?.name ?? "Espace"} · ${new Date(p.reservations.start_at).toLocaleDateString("fr-FR")}`
-                          : "—"}
+                          : p.subscriptions
+                            ? `Abonnement « ${p.subscriptions.plan_name} » · ${p.subscriptions.spaces?.name ?? "Espace"}`
+                            : "—"}
                         {p.note && <span className="block text-xs text-slate-400">{p.note}</span>}
                       </td>
                       <td className="p-4">{METHOD_LABELS[p.method]}</td>
@@ -344,10 +409,8 @@ export default function PaiementsPage() {
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold">{open.members?.full_name ?? "Membre"}</h2>
-                <p className="text-sm text-slate-500">
-                  {open.spaces?.name ?? "Espace"} · {formatSlot(open.start_at, open.end_at)}
-                </p>
+                <h2 className="text-lg font-bold">{open.name}</h2>
+                <p className="text-sm text-slate-500">{open.detail}</p>
               </div>
               <button
                 type="button"
@@ -359,9 +422,9 @@ export default function PaiementsPage() {
               </button>
             </div>
             <PaymentPanel
-              reservationId={open.id}
-              memberId={open.member_id}
-              price={open.price_amount}
+              target={{ kind: open.kind, id: open.id }}
+              memberId={open.memberId}
+              price={open.price}
               canPay
               onChanged={() => setRequestId((id) => id + 1)}
             />

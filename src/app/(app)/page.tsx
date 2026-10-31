@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/AppShell";
 import Avatar from "@/components/Avatar";
 import { spacePhotoUrl } from "@/lib/photos";
 import { formatFCFA, sumPayments } from "@/lib/payments";
+import { EXPIRY_ALERT_DAYS, alertLimitKey, localDateKey } from "@/lib/subscriptions";
+import Link from "next/link";
 
 type Member = {
   id: string;
@@ -98,6 +100,25 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [lastUpdated, setLastUpdated] = useState("");
   const [monthRevenue, setMonthRevenue] = useState<number | null>(null);
+  const [expiring, setExpiring] = useState<{ id: string; plan_name: string; ends_on: string; members: { full_name: string } | null }[]>([]);
+
+  // Abonnements qui se terminent bientôt
+  useEffect(() => {
+    let active = true;
+    supabase
+      .from("subscriptions")
+      .select("id, plan_name, ends_on, members(full_name)")
+      .eq("status", "active")
+      .gte("ends_on", localDateKey())
+      .lte("ends_on", alertLimitKey())
+      .order("ends_on")
+      .then(({ data }) => {
+        if (active) setExpiring((data ?? []) as unknown as typeof expiring);
+      });
+    return () => {
+      active = false;
+    };
+  }, [lastUpdated]);
 
   // Encaissements du mois en cours (table payments)
   useEffect(() => {
@@ -343,6 +364,25 @@ export default function Home() {
               </button>
             </div>
           </section>
+
+          {expiring.length > 0 && (
+            <Link
+              href="/abonnements"
+              className="block rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 transition hover:bg-amber-100"
+            >
+              <strong>
+                {expiring.length} abonnement(s) se terminent dans {EXPIRY_ALERT_DAYS} jours ou moins
+              </strong>{" "}
+              :{" "}
+              {expiring
+                .map(
+                  (sub) =>
+                    `${sub.members?.full_name ?? "Membre"} (${sub.plan_name}, fin le ${new Date(`${sub.ends_on}T00:00:00`).toLocaleDateString("fr-FR")})`
+                )
+                .join(", ")}
+              . <span className="underline">Voir les abonnements →</span>
+            </Link>
+          )}
 
           {error && (
             <div

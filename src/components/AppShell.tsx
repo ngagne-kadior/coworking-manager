@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+
+// Entrées affichées directement dans la barre du bas sur téléphone ;
+// les autres sont regroupées derrière « Plus ».
+const MOBILE_PRIMARY = ["/", "/reservations", "/members", "/paiements"];
 import { supabase } from "@/lib/supabase";
 import LogoutButton from "@/components/LogoutButton";
 import { initials } from "@/components/Avatar";
@@ -62,6 +66,12 @@ const NAV: NavItem[] = [
     icon: <Icon d="M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1M8 12h2M14 12h2M8 16h2" />,
   },
   {
+    label: "Abonnements",
+    short: "Abonn.",
+    path: "/abonnements",
+    icon: <Icon d="M4 5h16v15H4zM4 9h16M8 3v4M16 3v4M8 13h3v3H8z" />,
+  },
+  {
     label: "Paiements",
     short: "Paiements",
     path: "/paiements",
@@ -91,6 +101,7 @@ function isActive(pathname: string, path: string) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -118,6 +129,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // « Comptes » n'est affiché qu'à l'admin. La vraie protection est
   // côté serveur et dans la base : ceci ne fait qu'alléger le menu.
   const items = NAV.filter((item) => !item.adminOnly || profile?.role === "admin");
+  const primary = items.filter((item) => MOBILE_PRIMARY.includes(item.path));
+  const secondary = items.filter((item) => !MOBILE_PRIMARY.includes(item.path));
 
   return (
     <div className="min-h-screen bg-[#f4f7fc] text-slate-800">
@@ -182,18 +195,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="px-4 pb-28 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pb-10 lg:pt-8">{children}</main>
 
       {/* Menu du bas (téléphone et tablette) */}
+      {moreOpen && (
+        <div className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" onClick={() => setMoreOpen(false)}>
+          <div
+            className="absolute inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] mx-3 rounded-2xl bg-white p-2 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {secondary.map((item) => {
+              const active = isActive(pathname, item.path);
+              return (
+                <Link
+                  key={item.path}
+                  href={item.path}
+                  onClick={() => setMoreOpen(false)}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm ${
+                    active ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {item.icon}
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <nav
         aria-label="Navigation principale"
         className="fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
-        {items.map((item) => {
+        {primary.map((item) => {
           const active = isActive(pathname, item.path);
           return (
             <Link
               key={item.path}
               href={item.path}
+              onClick={() => setMoreOpen(false)}
               aria-current={active ? "page" : undefined}
-              className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] ${
+              className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] ${
                 active ? "font-semibold text-blue-600" : "text-slate-500"
               }`}
             >
@@ -202,6 +242,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((open) => !open)}
+          aria-expanded={moreOpen}
+          className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] ${
+            moreOpen || secondary.some((item) => isActive(pathname, item.path))
+              ? "font-semibold text-blue-600"
+              : "text-slate-500"
+          }`}
+        >
+          <Icon d="M5 12h.01M12 12h.01M19 12h.01" />
+          Plus
+        </button>
       </nav>
     </div>
   );
