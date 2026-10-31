@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
+import { METHOD_LABELS, RATE_UNITS, type PaymentMethod } from "@/lib/payments";
 
 type AuditEntry = {
   id: number;
@@ -46,6 +47,8 @@ const TABLE_LABELS: Record<string, string> = {
   spaces: "Espace",
   reservations: "Réservation",
   profiles: "Compte utilisateur",
+  payments: "Paiement",
+  space_rates: "Tarif",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -85,6 +88,13 @@ const FIELD_LABELS: Record<string, string> = {
   member_id: "Membre",
   space_id: "Espace",
   photo_path: "Photo",
+  price_amount: "Montant dû",
+  amount: "Montant",
+  method: "Moyen de paiement",
+  paid_at: "Date de paiement",
+  price: "Prix",
+  unit: "Durée",
+  reservation_id: "Réservation",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -120,6 +130,15 @@ function formatValue(field: string, value: unknown) {
     return formatDateTime(String(value));
   }
   if (field === "photo_path") return "Photo";
+  if (field === "amount" || field === "price" || field === "price_amount") {
+    return `${new Intl.NumberFormat("fr-FR").format(Number(value))} F CFA`;
+  }
+  if (field === "method") return METHOD_LABELS[value as PaymentMethod] ?? String(value);
+  if (field === "unit") {
+    return RATE_UNITS.find((u) => u.unit === value)?.label ?? String(value);
+  }
+  if (field === "paid_at") return formatDateTime(String(value));
+  if (field === "reservation_id") return `#${String(value).slice(0, 8)}`;
   if (field === "member_id" || field === "space_id") {
     return `#${String(value).slice(0, 8)}`;
   }

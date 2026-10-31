@@ -62,8 +62,14 @@ const NAV: NavItem[] = [
     icon: <Icon d="M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1M8 12h2M14 12h2M8 16h2" />,
   },
   {
+    label: "Paiements",
+    short: "Paiements",
+    path: "/paiements",
+    icon: <Icon d="M3 7h18v10H3zM3 11h18M7 15h2M17 7V5H5" />,
+  },
+  {
     label: "Historique",
-    short: "Historique",
+    short: "Hist.",
     path: "/historique",
     icon: <Icon d="M12 8v4l2.5 2.5M3.05 11a9 9 0 1 1 .5 4M3 5v6h6" />,
   },

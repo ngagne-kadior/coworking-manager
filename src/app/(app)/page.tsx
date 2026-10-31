@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
 import Avatar from "@/components/Avatar";
 import { spacePhotoUrl } from "@/lib/photos";
+import { formatFCFA, sumPayments } from "@/lib/payments";
 
 type Member = {
   id: string;
@@ -96,6 +97,24 @@ export default function Home() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [lastUpdated, setLastUpdated] = useState("");
+  const [monthRevenue, setMonthRevenue] = useState<number | null>(null);
+
+  // Encaissements du mois en cours (table payments)
+  useEffect(() => {
+    let active = true;
+    const start = startOfDay();
+    start.setDate(1);
+    supabase
+      .from("payments")
+      .select("amount")
+      .gte("paid_at", start.toISOString())
+      .then(({ data, error }) => {
+        if (active) setMonthRevenue(error ? null : sumPayments(data));
+      });
+    return () => {
+      active = false;
+    };
+  }, [lastUpdated]);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -355,7 +374,7 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <StatCard
                 title="Membres actifs"
                 value={stats.activeMembers}
@@ -385,6 +404,14 @@ export default function Home() {
                 value={`${stats.occupancy}%`}
                 icon="◷"
                 description={`${stats.occupiedSpaces} espace(s) occupé(s) sur ${stats.activeSpaces}`}
+                color="green"
+                loading={loading}
+              />
+              <StatCard
+                title="Encaissé ce mois"
+                value={monthRevenue === null ? "—" : formatFCFA(monthRevenue)}
+                icon="₣"
+                description="Paiements enregistrés depuis le 1er"
                 color="green"
                 loading={loading}
               />

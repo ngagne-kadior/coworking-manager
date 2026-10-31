@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
 import PhotoButton from "@/components/PhotoButton";
 import { SPACE_BUCKET, removePhoto, replacePhoto, spacePhotoUrl } from "@/lib/photos";
+import RatesDialog, { ratesSummary } from "@/components/RatesDialog";
+import type { SpaceRate } from "@/lib/payments";
 
 const SPACE_FIELDS = "id, name, description, capacity, is_active, photo_path";
 
@@ -26,6 +28,25 @@ export default function SpacesPage() {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
+  const [rates, setRates] = useState<SpaceRate[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [ratesFor, setRatesFor] = useState<Space | null>(null);
+
+  // Tarifs et rôle (seul l'admin modifie les tarifs ; la base le vérifie aussi)
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      supabase.from("space_rates").select("space_id, unit, price"),
+      supabase.rpc("current_app_role"),
+    ]).then(([rateRes, roleRes]) => {
+      if (!active) return;
+      setRates((rateRes.data ?? []) as SpaceRate[]);
+      setIsAdmin(roleRes.data === "admin");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -492,6 +513,11 @@ export default function SpacesPage() {
                       <p className="mt-2 line-clamp-2 min-h-10 text-sm text-slate-500">
                         {space.description || "Aucune description."}
                       </p>
+                      <p className="mt-3 text-xs font-medium text-slate-700">
+                        {ratesSummary(rates.filter((r) => r.space_id === space.id)) || (
+                          <span className="font-normal text-slate-400">Aucun tarif défini</span>
+                        )}
+                      </p>
 
                       <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                         <button
@@ -501,6 +527,15 @@ export default function SpacesPage() {
                         >
                           Modifier
                         </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setRatesFor(space)}
+                            className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                          >
+                            Tarifs
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => void toggleActive(space)}
@@ -531,6 +566,22 @@ export default function SpacesPage() {
           )}
         </section>
       </div>
+      {ratesFor && (
+        <RatesDialog
+          spaceId={ratesFor.id}
+          spaceName={ratesFor.name}
+          rates={rates.filter((r) => r.space_id === ratesFor.id)}
+          onClose={() => setRatesFor(null)}
+          onSaved={(saved) => {
+            setRates((current) => [
+              ...current.filter((r) => r.space_id !== ratesFor.id),
+              ...saved,
+            ]);
+            setSuccess(`Tarifs de « ${ratesFor.name} » enregistrés.`);
+            setRatesFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }
