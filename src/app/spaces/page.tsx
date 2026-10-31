@@ -51,6 +51,10 @@ export default function SpacesPage() {
   }, []);
 
   useEffect(() => {
+    // Chargement initial des données depuis Supabase. L'état « loading »
+    // vaut déjà true au premier rendu : le setLoading(true) synchrone de
+    // loadSpaces ne provoque aucun rendu supplémentaire.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSpaces();
   }, [loadSpaces]);
 
@@ -263,7 +267,7 @@ export default function SpacesPage() {
                 htmlFor="spaceName"
                 className="mb-1 block text-sm font-medium"
               >
-                Nom de l'espace *
+                Nom de l&apos;espace *
               </label>
               <input
                 id="spaceName"

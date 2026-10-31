@@ -69,3 +69,11 @@ Construire le logiciel progressivement, une fonctionnalité à la fois. Chaque �
 
 ## Règle de validation
 Une fonctionnalité n'est terminée que lorsque son comportement normal, ses erreurs attendues et ses permissions ont été testés.
+
+## État au 31/10/2026 — version 1 livrée
+- Phases 1 à 3 : structure, schéma SQL sauvegardé (`supabase/migrations/`), RLS sur toutes les tables, connexion/déconnexion, pages protégées (`src/proxy.ts`).
+- Phases 4 à 6 : membres, espaces, réservations (créées confirmées, anti-chevauchement garanti par la base, statuts automatiques via pg_cron).
+- Phase 7 : tableau de bord sur données réelles, historique automatique non modifiable (`/historique`).
+- Phase 8 : comptes et rôles réservés à l'admin (`/utilisateurs`), clé service_role côté serveur uniquement.
+- Phase 9 : build, TypeScript et lint sans erreur ; affichage téléphone vérifié.
+- Hors V1 : invitation par e-mail et « mot de passe oublié » (nécessitent un SMTP personnalisé, ex. Brevo, sur un domaine authentifié).

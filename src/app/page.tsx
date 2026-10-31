@@ -149,7 +149,7 @@ export default function Home() {
           .select("id", { count: "exact", head: true })
           .gte("start_at", todayStart.toISOString())
           .lt("start_at", tomorrowStart.toISOString())
-          .in("status", ["pending", "confirmed", "completed"]),
+          .in("status", ["confirmed", "completed"]),
 
         supabase
           .from("reservations")
@@ -186,7 +186,7 @@ export default function Home() {
               weekStart.getDate() + 7
             ).toISOString()
           )
-          .in("status", ["pending", "confirmed", "completed"]),
+          .in("status", ["confirmed", "completed"]),
       ]);
 
       const firstError = [
@@ -254,6 +254,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    // Chargement initial des données depuis Supabase. L'état « loading »
+    // vaut déjà true au premier rendu : le setLoading(true) synchrone de
+    // loadDashboard ne provoque aucun rendu supplémentaire.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDashboard();
   }, [loadDashboard]);
 
@@ -338,18 +342,12 @@ export default function Home() {
 
       <main className="min-h-screen lg:ml-[250px]">
         <header className="sticky top-0 z-20 flex min-h-[76px] flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 bg-white/95 px-4 py-3 backdrop-blur sm:px-7 lg:px-9">
-         <div>
-  <p className="text-xs text-slate-400">Espace de travail /</p>
-  <h1 className="mt-1 text-lg font-bold text-slate-900">
-    Tableau de bord
-  </h1>
-</div>
-  <div>
-    <p className="text-xs text-slate-400">Espace de travail /</p>
-    <h1 className="mt-1 text-lg font-bold text-slate-900">
-      Tableau de bord
-    </h1>
-  </div>
+          <div>
+            <p className="text-xs text-slate-400">Espace de travail /</p>
+            <h1 className="mt-1 text-lg font-bold text-slate-900">
+              Tableau de bord
+            </h1>
+          </div>
 
           <div className="flex items-center gap-3 sm:gap-5">
             <div className="relative hidden sm:block">
@@ -455,7 +453,7 @@ export default function Home() {
                 title="Réservations du jour"
                 value={stats.todayReservations}
                 icon="▣"
-                description="Réservations non annulées"
+                description="Confirmées ou terminées"
                 color="orange"
                 loading={loading}
               />

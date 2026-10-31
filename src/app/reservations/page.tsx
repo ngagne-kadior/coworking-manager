@@ -152,6 +152,10 @@ export default function ReservationsPage() {
   }, []);
 
   useEffect(() => {
+    // Chargement initial des données depuis Supabase. L'état « loading »
+    // vaut déjà true au premier rendu : le setLoading(true) synchrone de
+    // loadData ne provoque aucun rendu supplémentaire.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
   }, [loadData]);
 
