@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabase";
+
 export type RateUnit = "hour" | "half_day" | "day" | "month";
 export type PaymentMethod = "cash" | "wave" | "orange_money" | "transfer" | "card";
 
@@ -79,4 +81,40 @@ export function sumPayments(rows: { amount: number }[] | null | undefined) {
 export function parseAmount(value: string): number | null {
   const digits = value.replace(/[^\d]/g, "");
   return digits ? Number(digits) : null;
+}
+
+export function ratesSummary(rates: SpaceRate[]) {
+  return RATE_UNITS.filter(({ unit }) => rates.some((r) => r.unit === unit))
+    .map(({ unit, short }) => `${formatFCFA(rates.find((r) => r.unit === unit)!.price)}${short}`)
+    .join(" · ");
+}
+
+/** Enregistre les tarifs d'un espace (admin). Valeur vide = pas de tarif pour cette durée. */
+export async function saveRates(spaceId: string, values: Record<RateUnit, string>): Promise<SpaceRate[]> {
+  const toUpsert: SpaceRate[] = [];
+  const toDelete: RateUnit[] = [];
+  for (const { unit } of RATE_UNITS) {
+    const price = parseAmount(values[unit]);
+    if (price === null) toDelete.push(unit);
+    else toUpsert.push({ space_id: spaceId, unit, price });
+  }
+  if (toUpsert.length) {
+    const { error } = await supabase
+      .from("space_rates")
+      .upsert(toUpsert.map((r) => ({ ...r, updated_at: new Date().toISOString() })), {
+        onConflict: "space_id,unit",
+      });
+    if (error) {
+      throw new Error(
+        error.code === "42501"
+          ? "Seul l'administrateur peut modifier les tarifs."
+          : `Tarifs non enregistrés : ${error.message}`
+      );
+    }
+  }
+  if (toDelete.length) {
+    const { error } = await supabase.from("space_rates").delete().eq("space_id", spaceId).in("unit", toDelete);
+    if (error) throw new Error(`Tarifs non enregistrés : ${error.message}`);
+  }
+  return toUpsert;
 }

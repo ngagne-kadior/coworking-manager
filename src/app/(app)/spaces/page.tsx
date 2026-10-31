@@ -1,14 +1,29 @@
-
 "use client";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
 import PhotoButton from "@/components/PhotoButton";
-import { SPACE_BUCKET, removePhoto, replacePhoto, spacePhotoUrl } from "@/lib/photos";
-import RatesDialog, { ratesSummary } from "@/components/RatesDialog";
-import type { SpaceRate } from "@/lib/payments";
+import {
+  MAX_SPACE_PHOTOS,
+  addSpacePhoto,
+  deleteSpacePhoto,
+  setSpaceCover,
+  spacePhotoUrl,
+  type SpacePhoto,
+} from "@/lib/photos";
+import {
+  RATE_UNITS,
+  ratesSummary,
+  saveRates,
+  type RateUnit,
+  type SpaceRate,
+} from "@/lib/payments";
 
-const SPACE_FIELDS = "id, name, description, capacity, is_active, photo_path, booking_mode";
+// ---------- Données ----------
+
+const SPACE_FIELDS =
+  "id, name, description, capacity, is_active, photo_path, booking_mode, space_type, area_m2, location, amenities";
 
 type Space = {
   id: string;
@@ -18,611 +33,979 @@ type Space = {
   is_active: boolean;
   photo_path: string | null;
   booking_mode: "whole" | "seats";
+  space_type: string | null;
+  area_m2: number | null;
+  location: string | null;
+  amenities: string[];
 };
+
+const SPACE_TYPES = [
+  "Salle de réunion",
+  "Bureau privé",
+  "Open space",
+  "Salle de formation",
+  "Cabine téléphonique",
+  "Espace événementiel",
+];
+
+const AMENITIES: { key: string; label: string }[] = [
+  { key: "wifi", label: "Wi-Fi" },
+  { key: "clim", label: "Climatisation" },
+  { key: "ecran", label: "Écran / TV" },
+  { key: "projecteur", label: "Vidéoprojecteur" },
+  { key: "tableau", label: "Tableau blanc" },
+  { key: "imprimante", label: "Imprimante" },
+  { key: "cafe", label: "Café / thé" },
+  { key: "casiers", label: "Casiers" },
+  { key: "parking", label: "Parking" },
+  { key: "pmr", label: "Accès PMR" },
+];
+
+const amenityLabel = (key: string) => AMENITIES.find((a) => a.key === key)?.label ?? key;
+
+const fieldClass =
+  "w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+
+const EMPTY_RATES: Record<RateUnit, string> = { hour: "", half_day: "", day: "", month: "" };
+
+// ---------- Page ----------
 
 export default function SpacesPage() {
   const [spaces, setSpaces] = useState<Space[]>([]);
+  const [rates, setRates] = useState<SpaceRate[]>([]);
+  const [photos, setPhotos] = useState<SpacePhoto[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
-  const [rates, setRates] = useState<SpaceRate[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [ratesFor, setRatesFor] = useState<Space | null>(null);
+  const [showInactive, setShowInactive] = useState(true);
 
-  // Tarifs et rôle (seul l'admin modifie les tarifs ; la base le vérifie aussi)
-  useEffect(() => {
-    let active = true;
-    Promise.all([
-      supabase.from("space_rates").select("space_id, unit, price"),
-      supabase.rpc("current_app_role"),
-    ]).then(([rateRes, roleRes]) => {
-      if (!active) return;
-      setRates((rateRes.data ?? []) as SpaceRate[]);
-      setIsAdmin(roleRes.data === "admin");
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const [formFor, setFormFor] = useState<Space | "new" | null>(null);
+  const [detailsId, setDetailsId] = useState<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [capacity, setCapacity] = useState("1");
-  const [bookingMode, setBookingMode] = useState<"whole" | "seats">("whole");
-
-  const loadSpaces = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
-
-    try {
-      const { data, error } = await supabase
-        .from("spaces")
-        .select(SPACE_FIELDS)
-        .order("name");
-
-      if (error) {
-        setError(`Impossible de charger les espaces : ${error.message}`);
-        return;
-      }
-
-      setSpaces(data ?? []);
-    } catch {
-      setError("Erreur inattendue pendant le chargement des espaces.");
-    } finally {
-      setLoading(false);
+    const [spaceRes, rateRes, photoRes, roleRes] = await Promise.all([
+      supabase.from("spaces").select(SPACE_FIELDS).order("name"),
+      supabase.from("space_rates").select("space_id, unit, price"),
+      supabase.from("space_photos").select("id, space_id, path, position").order("position"),
+      supabase.rpc("current_app_role"),
+    ]);
+    const firstError = spaceRes.error ?? rateRes.error ?? photoRes.error;
+    if (firstError) {
+      setError(`Impossible de charger les espaces : ${firstError.message}`);
+    } else {
+      setSpaces((spaceRes.data ?? []) as Space[]);
+      setRates((rateRes.data ?? []) as SpaceRate[]);
+      setPhotos((photoRes.data ?? []) as SpacePhoto[]);
     }
+    setIsAdmin(roleRes.data === "admin");
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    // Chargement initial des données depuis Supabase. L'état « loading »
-    // vaut déjà true au premier rendu : le setLoading(true) synchrone de
-    // loadSpaces ne provoque aucun rendu supplémentaire.
+    // Chargement initial : « loading » vaut déjà true au premier rendu.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadSpaces();
-  }, [loadSpaces]);
+    void load();
+  }, [load]);
 
-  function resetForm() {
-    setEditingId(null);
-    setName("");
-    setDescription("");
-    setCapacity("1");
-    setBookingMode("whole");
+  const filtered = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return spaces.filter(
+      (space) =>
+        (showInactive || space.is_active) &&
+        (!query ||
+          `${space.name} ${space.description ?? ""} ${space.space_type ?? ""} ${space.location ?? ""}`
+            .toLocaleLowerCase()
+            .includes(query))
+    );
+  }, [spaces, search, showInactive]);
+
+  const activeCount = spaces.filter((s) => s.is_active).length;
+  const totalCapacity = spaces.filter((s) => s.is_active).reduce((sum, s) => sum + s.capacity, 0);
+
+  function photosOf(spaceId: string) {
+    return photos.filter((p) => p.space_id === spaceId).sort((a, b) => a.position - b.position);
   }
 
-  function startEditing(space: Space) {
-    setEditingId(space.id);
-    setName(space.name);
-    setDescription(space.description ?? "");
-    setCapacity(String(space.capacity));
-    setBookingMode(space.booking_mode);
+  async function toggleActive(space: Space) {
+    const next = !space.is_active;
+    if (
+      !window.confirm(
+        next ? `Activer « ${space.name} » ?` : `Désactiver « ${space.name} » ? Il ne pourra plus être réservé.`
+      )
+    ) {
+      return;
+    }
     setError("");
     setSuccess("");
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const { data, error: updateError } = await supabase
+      .from("spaces")
+      .update({ is_active: next })
+      .eq("id", space.id)
+      .select(SPACE_FIELDS)
+      .maybeSingle();
+    if (updateError || !data) {
+      setError(`Changement de statut impossible : ${updateError?.message ?? "droits insuffisants"}`);
+      return;
+    }
+    setSpaces((current) => current.map((s) => (s.id === space.id ? (data as Space) : s)));
+    setSuccess(`« ${space.name} » est maintenant ${next ? "actif" : "inactif"}.`);
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  const detailsSpace = spaces.find((s) => s.id === detailsId) ?? null;
+
+  return (
+    <div className="text-slate-900">
+      <div className="mx-auto max-w-7xl">
+        <PageHeader
+          title="Espaces"
+          description="Tes espaces, leurs photos, tarifs et équipements."
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => void load()}
+                disabled={loading}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-100 disabled:opacity-50"
+              >
+                {loading ? "Actualisation..." : "Actualiser"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setSuccess("");
+                  setFormFor("new");
+                }}
+                className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+              >
+                + Ajouter un espace
+              </button>
+            </>
+          }
+        />
+
+        {error && (
+          <p role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+        {success && (
+          <p role="status" className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+            {success}
+          </p>
+        )}
+
+        {/* Chiffres */}
+        <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {(
+            [
+              ["Espaces", String(spaces.length), "text-slate-900"],
+              ["Espaces actifs", String(activeCount), "text-green-600"],
+              ["Capacité totale (actifs)", `${totalCapacity} pers.`, "text-blue-700"],
+            ] as const
+          ).map(([label, value, color]) => (
+            <div key={label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-slate-500">{label}</p>
+              <p className={`mt-2 text-3xl font-bold ${color}`}>{loading && spaces.length === 0 ? "—" : value}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* Recherche */}
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher par nom, type, emplacement..."
+            aria-label="Rechercher un espace"
+            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-600 sm:max-w-md"
+          />
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Afficher les espaces inactifs
+          </label>
+        </div>
+
+        {/* Cartes */}
+        {loading && spaces.length === 0 ? (
+          <p className="text-slate-600">Chargement des espaces...</p>
+        ) : filtered.length === 0 ? (
+          <p className="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">
+            {spaces.length === 0
+              ? "Aucun espace pour le moment. Clique sur « + Ajouter un espace »."
+              : "Aucun espace ne correspond à ta recherche."}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((space) => {
+              const cover = spacePhotoUrl(space.photo_path);
+              const count = photosOf(space.id).length;
+              const summary = ratesSummary(rates.filter((r) => r.space_id === space.id));
+              return (
+                <article
+                  key={space.id}
+                  onClick={() => setDetailsId(space.id)}
+                  className={`cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md ${
+                    space.is_active ? "" : "opacity-70"
+                  }`}
+                >
+                  <div className="relative h-44 bg-gradient-to-br from-blue-50 to-slate-100">
+                    {cover ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- image Supabase Storage
+                      <img src={cover} alt={`Photo de ${space.name}`} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs font-medium text-slate-400">
+                        Pas encore de photo
+                      </div>
+                    )}
+                    <span
+                      className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${
+                        space.is_active ? "bg-white/95 text-green-700" : "bg-slate-800/80 text-white"
+                      }`}
+                    >
+                      {space.is_active ? "Actif" : "Inactif"}
+                    </span>
+                    <span className="absolute right-3 top-3 rounded-full bg-slate-900/70 px-2.5 py-1 text-xs font-medium text-white">
+                      {count}/{MAX_SPACE_PHOTOS} photos
+                    </span>
+                  </div>
+
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-semibold">{space.name}</h3>
+                        <p className="text-xs text-slate-500">
+                          {[space.space_type, space.location].filter(Boolean).join(" · ") || "Type non précisé"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                        {space.booking_mode === "seats" ? `${space.capacity} places` : `${space.capacity} pers.`}
+                      </span>
+                    </div>
+
+                    <p className="mt-3 text-xs font-medium text-slate-700">
+                      {summary || <span className="font-normal text-slate-400">Aucun tarif défini</span>}
+                    </p>
+
+                    {space.amenities.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {space.amenities.slice(0, 4).map((a) => (
+                          <span key={a} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                            {amenityLabel(a)}
+                          </span>
+                        ))}
+                        {space.amenities.length > 4 && (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                            +{space.amenities.length - 4}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDetailsId(space.id);
+                        }}
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
+                      >
+                        Détails
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {detailsSpace && !formFor && (
+        <SpaceDetails
+          space={detailsSpace}
+          photos={photosOf(detailsSpace.id)}
+          rates={rates.filter((r) => r.space_id === detailsSpace.id)}
+          onClose={() => setDetailsId(null)}
+          onEdit={() => setFormFor(detailsSpace)}
+          onToggle={() => void toggleActive(detailsSpace)}
+          onPhotosChanged={(next, cover) => {
+            setPhotos((current) => [...current.filter((p) => p.space_id !== detailsSpace.id), ...next]);
+            setSpaces((current) =>
+              current.map((s) => (s.id === detailsSpace.id ? { ...s, photo_path: cover } : s))
+            );
+          }}
+        />
+      )}
+
+      {formFor && (
+        <SpaceForm
+          space={formFor === "new" ? null : formFor}
+          rates={formFor === "new" ? [] : rates.filter((r) => r.space_id === formFor.id)}
+          isAdmin={isAdmin}
+          onClose={() => setFormFor(null)}
+          onSaved={(message) => {
+            setFormFor(null);
+            setSuccess(message);
+            void load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------- Fenêtres ----------
+
+function Overlay({
+  title,
+  side,
+  onClose,
+  children,
+}: {
+  title: string;
+  side?: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 flex items-end bg-slate-900/50 ${
+        side ? "sm:items-stretch sm:justify-end" : "justify-center sm:items-center sm:p-4"
+      }`}
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(event) => event.stopPropagation()}
+        className={`max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl ${
+          side ? "sm:max-h-none sm:max-w-lg sm:rounded-none" : "sm:max-w-2xl sm:rounded-2xl"
+        }`}
+      >
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <h2
+            className={
+              side ? "text-sm font-semibold uppercase tracking-wide text-slate-500" : "text-xl font-semibold"
+            }
+          >
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fermer"
+            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          >
+            ✕
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SpaceForm({
+  space,
+  rates,
+  isAdmin,
+  onClose,
+  onSaved,
+}: {
+  space: Space | null;
+  rates: SpaceRate[];
+  isAdmin: boolean;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const creating = space === null;
+  const [name, setName] = useState(space?.name ?? "");
+  const [spaceType, setSpaceType] = useState(space?.space_type ?? "");
+  const [description, setDescription] = useState(space?.description ?? "");
+  const [capacity, setCapacity] = useState(String(space?.capacity ?? 1));
+  const [bookingMode, setBookingMode] = useState<"whole" | "seats">(space?.booking_mode ?? "whole");
+  const [area, setArea] = useState(space?.area_m2 ? String(space.area_m2) : "");
+  const [location, setLocation] = useState(space?.location ?? "");
+  const [amenities, setAmenities] = useState<string[]>(space?.amenities ?? []);
+  const [rateValues, setRateValues] = useState<Record<RateUnit, string>>(() => {
+    const values = { ...EMPTY_RATES };
+    for (const r of rates) values[r.unit] = String(r.price);
+    return values;
+  });
+  const [files, setFiles] = useState<File[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function toggleAmenity(key: string) {
+    setAmenities((current) => (current.includes(key) ? current.filter((a) => a !== key) : [...current, key]));
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setSuccess("");
 
     const cleanName = name.trim();
-    const cleanDescription = description.trim();
     const parsedCapacity = Number(capacity);
+    const parsedArea = area.trim() ? Number(area) : null;
 
     if (!cleanName) {
       setError("Le nom de l'espace est obligatoire.");
       return;
     }
-
     if (!Number.isInteger(parsedCapacity) || parsedCapacity < 1) {
-      setError("La capacité doit être un entier supérieur à zéro.");
+      setError("La capacité doit être un nombre entier supérieur à zéro.");
+      return;
+    }
+    if (parsedArea !== null && (!Number.isInteger(parsedArea) || parsedArea < 1)) {
+      setError("La surface doit être un nombre entier de m².");
       return;
     }
 
     setSaving(true);
+    const payload = {
+      name: cleanName,
+      space_type: spaceType || null,
+      description: description.trim() || null,
+      capacity: parsedCapacity,
+      booking_mode: bookingMode,
+      area_m2: parsedArea,
+      location: location.trim() || null,
+      amenities,
+    };
 
-    try {
-      if (editingId) {
-        const { data, error } = await supabase
+    const { data, error: saveError } = space
+      ? await supabase.from("spaces").update(payload).eq("id", space.id).select("id").maybeSingle()
+      : await supabase
           .from("spaces")
-          .update({
-            name: cleanName,
-            description: cleanDescription || null,
-            capacity: parsedCapacity,
-            booking_mode: bookingMode,
-          })
-          .eq("id", editingId)
-          .select(SPACE_FIELDS)
-          .maybeSingle();
-
-        if (error) {
-          setError(`Échec de la modification : ${error.message}`);
-          return;
-        }
-
-        if (!data) {
-          setError(
-            "Aucune ligne modifiée. Vérifie tes droits Supabase et les règles RLS."
-          );
-          return;
-        }
-
-        setSpaces((current) =>
-          current.map((space) => (space.id === data.id ? data : space))
-        );
-        setSuccess("Modifications enregistrées.");
-      } else {
-        const { data, error } = await supabase
-          .from("spaces")
-          .insert({
-            name: cleanName,
-            description: cleanDescription || null,
-            capacity: parsedCapacity,
-            booking_mode: bookingMode,
-            is_active: true,
-          })
-          .select(SPACE_FIELDS)
+          .insert({ ...payload, is_active: true })
+          .select("id")
           .single();
 
-        if (error) {
-          setError(`Échec de l'ajout : ${error.message}`);
-          return;
-        }
-
-        setSpaces((current) =>
-          [...current, data].sort((a, b) => a.name.localeCompare(b.name))
-        );
-        setSuccess("Espace ajouté. Ajoute maintenant sa photo depuis sa carte, plus bas.");
-      }
-
-      resetForm();
-    } catch {
-      setError("Erreur inattendue. Vérifie ta connexion et réessaie.");
-    } finally {
+    if (saveError || !data) {
       setSaving(false);
+      setError(`Enregistrement impossible : ${saveError?.message ?? "droits insuffisants"}`);
+      return;
     }
-  }
+    const spaceId = data.id as string;
+    const warnings: string[] = [];
 
-  async function toggleActive(space: Space) {
-    const nextStatus = !space.is_active;
-    const confirmation = window.confirm(
-      nextStatus
-        ? `Activer l'espace « ${space.name} » ?`
-        : `Désactiver l'espace « ${space.name} » ?`
-    );
-
-    if (!confirmation) return;
-
-    setError("");
-    setSuccess("");
-
-    try {
-      const { data, error } = await supabase
-        .from("spaces")
-        .update({ is_active: nextStatus })
-        .eq("id", space.id)
-        .select(SPACE_FIELDS)
-        .maybeSingle();
-
-      if (error) {
-        setError(`Échec du changement de statut : ${error.message}`);
-        return;
+    if (isAdmin) {
+      try {
+        await saveRates(spaceId, rateValues);
+      } catch (err) {
+        warnings.push(err instanceof Error ? err.message : "Tarifs non enregistrés.");
       }
+    }
 
-      if (!data) {
-        setError(
-          "Le statut n'a pas été modifié. Vérifie les droits de mise à jour Supabase."
-        );
-        return;
+    let sent = 0;
+    for (const [index, file] of files.entries()) {
+      try {
+        await addSpacePhoto({ spaceId, file, position: index, setAsCover: index === 0 });
+        sent++;
+      } catch (err) {
+        warnings.push(`Photo ${index + 1} : ${err instanceof Error ? err.message : "échec"}`);
       }
-
-      setSpaces((current) =>
-        current.map((item) => (item.id === data.id ? data : item))
-      );
-
-      setSuccess(
-        `L'espace « ${data.name} » est maintenant ${
-          data.is_active ? "actif" : "inactif"
-        }.`
-      );
-    } catch {
-      setError("Erreur inattendue pendant le changement de statut.");
     }
+
+    setSaving(false);
+    const base = creating ? `Espace « ${cleanName} » ajouté` : `Espace « ${cleanName} » mis à jour`;
+    const photoText = sent ? ` avec ${sent} photo(s)` : "";
+    onSaved(`${base}${photoText}.${warnings.length ? ` Attention : ${warnings.join(" ; ")}` : ""}`);
   }
-
-  async function changePhoto(space: Space, file: File) {
-    setError("");
-    setSuccess("");
-    setPhotoBusyId(space.id);
-    try {
-      const path = await replacePhoto({
-        bucket: SPACE_BUCKET,
-        table: "spaces",
-        id: space.id,
-        file,
-        maxSide: 1600,
-        previousPath: space.photo_path,
-      });
-      setSpaces((current) =>
-        current.map((item) => (item.id === space.id ? { ...item, photo_path: path } : item))
-      );
-      setSuccess(`Photo de « ${space.name} » enregistrée.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Envoi de la photo impossible.");
-    } finally {
-      setPhotoBusyId(null);
-    }
-  }
-
-  async function deletePhoto(space: Space) {
-    if (!space.photo_path) return;
-    if (!window.confirm(`Retirer la photo de « ${space.name} » ?`)) return;
-    setError("");
-    setSuccess("");
-    setPhotoBusyId(space.id);
-    try {
-      await removePhoto({
-        bucket: SPACE_BUCKET,
-        table: "spaces",
-        id: space.id,
-        path: space.photo_path,
-      });
-      setSpaces((current) =>
-        current.map((item) => (item.id === space.id ? { ...item, photo_path: null } : item))
-      );
-      setSuccess(`Photo de « ${space.name} » retirée.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Suppression impossible.");
-    } finally {
-      setPhotoBusyId(null);
-    }
-  }
-
-  const filteredSpaces = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-
-    if (!query) return spaces;
-
-    return spaces.filter((space) =>
-      `${space.name} ${space.description ?? ""}`
-        .toLocaleLowerCase()
-        .includes(query)
-    );
-  }, [spaces, search]);
 
   return (
-    <div className="text-slate-900">
-      <div className="mx-auto max-w-6xl">
-        <PageHeader
-          title="Espaces"
-          description="Gère les espaces de coworking et leurs photos."
-        />
+    <Overlay title={creating ? "Ajouter un espace" : "Modifier l'espace"} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-6">
+        {/* Informations */}
+        <section className="grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium">Nom de l&apos;espace *</span>
+            <input
+              required
+              autoFocus
+              maxLength={100}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex. Salle de réunion Baobab"
+              className={fieldClass}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Type d&apos;espace</span>
+            <select value={spaceType} onChange={(e) => setSpaceType(e.target.value)} className={fieldClass}>
+              <option value="">— Non précisé —</option>
+              {SPACE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Emplacement</span>
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              maxLength={100}
+              placeholder="Ex. 1er étage, aile gauche"
+              className={fieldClass}
+            />
+          </label>
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium">Description</span>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={1000}
+              rows={3}
+              placeholder="Ce qui rend cet espace utile : lumière, calme, vue..."
+              className={fieldClass}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Capacité (personnes) *</span>
+            <input
+              type="number"
+              min={1}
+              required
+              value={capacity}
+              onChange={(e) => setCapacity(e.target.value)}
+              className={fieldClass}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Surface (m²)</span>
+            <input
+              type="number"
+              min={1}
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              placeholder="Facultatif"
+              className={fieldClass}
+            />
+          </label>
+        </section>
+
+        {/* Mode de réservation */}
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium">Mode de réservation</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                ["whole", "Espace entier", "Une réservation bloque tout l'espace (salle de réunion, bureau privé)."],
+                ["seats", "Par place", "Plusieurs membres en même temps, jusqu'à la capacité (open space)."],
+              ] as const
+            ).map(([value, label, help]) => (
+              <label
+                key={value}
+                className={`cursor-pointer rounded-lg border p-3 text-sm ${
+                  bookingMode === value ? "border-blue-600 bg-blue-50" : "border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <span className="flex items-center gap-2 font-medium">
+                  <input
+                    type="radio"
+                    name="bookingMode"
+                    checked={bookingMode === value}
+                    onChange={() => setBookingMode(value)}
+                  />
+                  {label}
+                </span>
+                <span className="mt-1 block text-xs text-slate-500">{help}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {/* Tarifs */}
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium">Tarifs (F CFA)</legend>
+          {isAdmin ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {RATE_UNITS.map(({ unit, label }) => (
+                  <label key={unit} className="block text-xs">
+                    <span className="mb-1 block text-slate-600">{label.replace("Par ", "")}</span>
+                    <input
+                      inputMode="numeric"
+                      value={rateValues[unit]}
+                      onChange={(e) => setRateValues((v) => ({ ...v, [unit]: e.target.value }))}
+                      placeholder="—"
+                      className={fieldClass}
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Case vide = durée non proposée. À la réservation, la formule la moins chère est proposée.
+                {bookingMode === "seats" && " En mode « par place », le tarif s'entend par place."}
+              </p>
+            </>
+          ) : (
+            <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+              Seul l&apos;administrateur peut définir les tarifs.
+            </p>
+          )}
+        </fieldset>
+
+        {/* Équipements */}
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium">Équipements</legend>
+          <div className="flex flex-wrap gap-2">
+            {AMENITIES.map(({ key, label }) => {
+              const on = amenities.includes(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleAmenity(key)}
+                  aria-pressed={on}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    on
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {on ? "✓ " : ""}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {/* Photos (création) */}
+        {creating ? (
+          <NewPhotosField files={files} onChange={setFiles} />
+        ) : (
+          <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+            Les photos se gèrent dans la fiche de l&apos;espace (bouton « Détails »).
+          </p>
+        )}
+
         {error && (
-          <p
-            role="alert"
-            className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-          >
+          <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {error}
           </p>
         )}
 
-        {success && (
-          <p
-            role="status"
-            className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium hover:bg-slate-50"
           >
-            {success}
-          </p>
-        )}
+            Annuler
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {saving
+              ? files.length
+                ? "Envoi des photos..."
+                : "Enregistrement..."
+              : creating
+                ? "Ajouter l'espace"
+                : "Enregistrer"}
+          </button>
+        </div>
+      </form>
+    </Overlay>
+  );
+}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">
-            {editingId ? "Modifier l'espace" : "Ajouter un espace"}
-          </h2>
+function NewPhotosField({ files, onChange }: { files: File[]; onChange: (files: File[]) => void }) {
+  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => previews.forEach((url) => URL.revokeObjectURL(url)), [previews]);
 
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-            <div>
-              <label
-                htmlFor="spaceName"
-                className="mb-1 block text-sm font-medium"
-              >
-                Nom de l&apos;espace *
-              </label>
-              <input
-                id="spaceName"
-                required
-                maxLength={100}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Ex. Salle de réunion A"
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="spaceDescription"
-                className="mb-1 block text-sm font-medium"
-              >
-                Description
-              </label>
-              <textarea
-                id="spaceDescription"
-                maxLength={1000}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder="Description de l'espace"
-                rows={3}
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="spaceCapacity"
-                className="mb-1 block text-sm font-medium"
-              >
-                Capacité maximale *
-              </label>
-              <input
-                id="spaceCapacity"
-                type="number"
-                min="1"
-                step="1"
-                required
-                value={capacity}
-                onChange={(event) => setCapacity(event.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-
-            <fieldset>
-              <legend className="mb-2 block text-sm font-medium">Mode de réservation</legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {(
-                  [
-                    ["whole", "Espace entier", "Une réservation bloque tout l'espace (salle de réunion, bureau privé)."],
-                    ["seats", "Par place", "Plusieurs membres en même temps, jusqu'à la capacité (open space)."],
-                  ] as const
-                ).map(([value, label, help]) => (
-                  <label
-                    key={value}
-                    className={`cursor-pointer rounded-lg border p-3 text-sm transition ${
-                      bookingMode === value
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 font-medium">
-                      <input
-                        type="radio"
-                        name="bookingMode"
-                        value={value}
-                        checked={bookingMode === value}
-                        onChange={() => setBookingMode(value)}
-                      />
-                      {label}
-                    </span>
-                    <span className="mt-1 block text-xs text-slate-500">{help}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving
-                  ? "Enregistrement..."
-                  : editingId
-                    ? "Enregistrer les modifications"
-                    : "Ajouter l'espace"}
-              </button>
-
-              {editingId && (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => {
-                    resetForm();
-                    setError("");
-                    setSuccess("");
-                  }}
-                  className="rounded-lg border border-slate-300 px-5 py-3 font-semibold hover:bg-slate-50"
-                >
-                  Annuler
-                </button>
-              )}
-            </div>
-          </form>
-        </section>
-
-        <section className="mt-8">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div>
-              <h2 className="text-xl font-semibold">Liste des espaces</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                {filteredSpaces.length} résultat(s) sur {spaces.length} espace(s)
-              </p>
-            </div>
-
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-medium">
+        Photos ({files.length}/{MAX_SPACE_PHOTOS}) — la première sera la couverture
+      </legend>
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+        {previews.map((url, index) => (
+          <div key={url} className="relative aspect-square overflow-hidden rounded-lg border border-slate-200">
+            {/* eslint-disable-next-line @next/next/no-img-element -- aperçu local */}
+            <img src={url} alt={`Photo ${index + 1}`} className="h-full w-full object-cover" />
+            {index === 0 && (
+              <span className="absolute left-1 top-1 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                Couverture
+              </span>
+            )}
             <button
               type="button"
-              onClick={() => void loadSpaces()}
-              disabled={loading}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60"
+              onClick={() => onChange(files.filter((_, i) => i !== index))}
+              aria-label={`Retirer la photo ${index + 1}`}
+              className="absolute right-1 top-1 rounded-full bg-white/90 px-1.5 text-xs font-bold text-red-600 shadow"
             >
-              {loading ? "Chargement..." : "Actualiser"}
+              ✕
             </button>
           </div>
-
-          <div className="mt-4">
-            <label htmlFor="spaceSearch" className="sr-only">
-              Rechercher un espace
-            </label>
-            <input
-              id="spaceSearch"
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Rechercher par nom ou description..."
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-
-          {loading && (
-            <p className="mt-5 text-slate-600">Chargement des espaces...</p>
-          )}
-
-          {!loading && filteredSpaces.length === 0 && (
-            <p className="mt-5 rounded-xl border border-slate-200 bg-white p-6 text-slate-600">
-              {spaces.length === 0
-                ? "Aucun espace enregistré pour le moment."
-                : "Aucun espace ne correspond à ta recherche."}
-            </p>
-          )}
-
-          {!loading && filteredSpaces.length > 0 && (
-            <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredSpaces.map((space) => {
-                const photoUrl = spacePhotoUrl(space.photo_path);
-                const busy = photoBusyId === space.id;
-
-                return (
-                  <article
-                    key={space.id}
-                    className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:shadow-md ${
-                      space.is_active ? "border-slate-200" : "border-slate-200 opacity-75"
-                    }`}
-                  >
-                    <div className="relative h-44 bg-gradient-to-br from-blue-50 to-slate-100">
-                      {photoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- image Supabase Storage
-                        <img
-                          src={photoUrl}
-                          alt={`Photo de ${space.name}`}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full flex-col items-center justify-center gap-1 text-slate-400">
-                          <span className="text-3xl" aria-hidden="true">▧</span>
-                          <span className="text-xs font-medium">Pas encore de photo</span>
-                        </div>
-                      )}
-
-                      <span
-                        className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${
-                          space.is_active
-                            ? "bg-white/95 text-green-700"
-                            : "bg-slate-800/80 text-white"
-                        }`}
-                      >
-                        {space.is_active ? "Actif" : "Inactif"}
-                      </span>
-
-                      <PhotoButton
-                        label={space.photo_path ? "Changer la photo" : "Ajouter une photo"}
-                        disabled={busy}
-                        onFile={(file) => void changePhoto(space, file)}
-                        className="absolute bottom-3 right-3 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-white disabled:opacity-60"
-                      >
-                        {busy
-                          ? "Envoi..."
-                          : space.photo_path
-                            ? "Changer la photo"
-                            : "＋ Ajouter une photo"}
-                      </PhotoButton>
-                    </div>
-
-                    <div className="p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="font-semibold text-slate-900">{space.name}</h3>
-                        <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                          {space.booking_mode === "seats"
-                            ? `${space.capacity} places`
-                            : `${space.capacity} pers. · entier`}
-                        </span>
-                      </div>
-                      <p className="mt-2 line-clamp-2 min-h-10 text-sm text-slate-500">
-                        {space.description || "Aucune description."}
-                      </p>
-                      <p className="mt-3 text-xs font-medium text-slate-700">
-                        {ratesSummary(rates.filter((r) => r.space_id === space.id)) || (
-                          <span className="font-normal text-slate-400">Aucun tarif défini</span>
-                        )}
-                      </p>
-
-                      <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                        <button
-                          type="button"
-                          onClick={() => startEditing(space)}
-                          className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
-                        >
-                          Modifier
-                        </button>
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => setRatesFor(space)}
-                            className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-                          >
-                            Tarifs
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void toggleActive(space)}
-                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                            space.is_active
-                              ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                              : "border-green-200 text-green-700 hover:bg-green-50"
-                          }`}
-                        >
-                          {space.is_active ? "Désactiver" : "Activer"}
-                        </button>
-                        {space.photo_path && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void deletePhoto(space)}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-                          >
-                            Retirer la photo
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        ))}
+        {files.length < MAX_SPACE_PHOTOS && (
+          <PhotoButton
+            label="Ajouter une photo"
+            onFile={(file) => onChange([...files, file].slice(0, MAX_SPACE_PHOTOS))}
+            className="flex aspect-square flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-slate-400 hover:border-blue-400 hover:text-blue-600"
+          >
+            <span className="text-2xl">＋</span>
+            <span className="text-[11px] font-medium">Photo</span>
+          </PhotoButton>
+        )}
       </div>
-      {ratesFor && (
-        <RatesDialog
-          spaceId={ratesFor.id}
-          spaceName={ratesFor.name}
-          rates={rates.filter((r) => r.space_id === ratesFor.id)}
-          onClose={() => setRatesFor(null)}
-          onSaved={(saved) => {
-            setRates((current) => [
-              ...current.filter((r) => r.space_id !== ratesFor.id),
-              ...saved,
-            ]);
-            setSuccess(`Tarifs de « ${ratesFor.name} » enregistrés.`);
-            setRatesFor(null);
-          }}
-        />
+    </fieldset>
+  );
+}
+
+function SpaceDetails({
+  space,
+  photos,
+  rates,
+  onClose,
+  onEdit,
+  onToggle,
+  onPhotosChanged,
+}: {
+  space: Space;
+  photos: SpacePhoto[];
+  rates: SpaceRate[];
+  onClose: () => void;
+  onEdit: () => void;
+  onToggle: () => void;
+  onPhotosChanged: (photos: SpacePhoto[], cover: string | null) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const selected =
+    photos.find((p) => p.id === selectedId) ??
+    photos.find((p) => p.path === space.photo_path) ??
+    photos[0] ??
+    null;
+  const selectedUrl = spacePhotoUrl(selected?.path ?? null);
+
+  async function add(file: File) {
+    setError("");
+    setBusy(true);
+    try {
+      const photo = await addSpacePhoto({
+        spaceId: space.id,
+        file,
+        position: Math.max(-1, ...photos.map((p) => p.position)) + 1,
+        setAsCover: !space.photo_path,
+      });
+      onPhotosChanged([...photos, photo], space.photo_path ?? photo.path);
+      setSelectedId(photo.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Envoi impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(photo: SpacePhoto) {
+    if (!window.confirm("Supprimer cette photo ?")) return;
+    setError("");
+    setBusy(true);
+    try {
+      const remaining = photos.filter((p) => p.id !== photo.id);
+      const cover = await deleteSpacePhoto(photo, remaining, space.photo_path);
+      onPhotosChanged(remaining, cover);
+      setSelectedId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Suppression impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function makeCover(photo: SpacePhoto) {
+    setError("");
+    setBusy(true);
+    try {
+      await setSpaceCover(space.id, photo.path);
+      onPhotosChanged(photos, photo.path);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Modification impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const summary = ratesSummary(rates);
+
+  return (
+    <Overlay title="Fiche espace" side onClose={onClose}>
+      {/* Galerie */}
+      <div className="overflow-hidden rounded-xl bg-slate-100">
+        <div className="relative aspect-[4/3]">
+          {selectedUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- image Supabase Storage
+            <img src={selectedUrl} alt={`Photo de ${space.name}`} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-slate-400">Aucune photo</div>
+          )}
+          {selected && selected.path === space.photo_path && (
+            <span className="absolute left-3 top-3 rounded-full bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white">
+              Couverture
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {photos.map((photo, index) => (
+          <button
+            key={photo.id}
+            type="button"
+            onClick={() => setSelectedId(photo.id)}
+            aria-label={`Voir la photo ${index + 1}`}
+            className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 ${
+              selected?.id === photo.id ? "border-blue-600" : "border-transparent"
+            }`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- image Supabase Storage */}
+            <img src={spacePhotoUrl(photo.path) ?? ""} alt="" className="h-full w-full object-cover" />
+          </button>
+        ))}
+        {photos.length < MAX_SPACE_PHOTOS && (
+          <PhotoButton
+            label="Ajouter une photo"
+            disabled={busy}
+            onFile={(file) => void add(file)}
+            className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-slate-400 hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+          >
+            <span className="text-lg">{busy ? "…" : "＋"}</span>
+          </PhotoButton>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-slate-500">
+          {photos.length}/{MAX_SPACE_PHOTOS} photos
+        </span>
+        {selected && (
+          <div className="flex gap-2">
+            {selected.path !== space.photo_path && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void makeCover(selected)}
+                className="rounded-lg border border-slate-300 px-2.5 py-1 font-medium hover:bg-slate-50 disabled:opacity-50"
+              >
+                Mettre en couverture
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void remove(selected)}
+              className="rounded-lg border border-red-200 px-2.5 py-1 font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              Supprimer la photo
+            </button>
+          </div>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </p>
       )}
-    </div>
+
+      {/* Informations */}
+      <div className="mt-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold">{space.name}</h3>
+            <p className="text-sm text-slate-500">{space.space_type ?? "Type non précisé"}</p>
+          </div>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              space.is_active ? "bg-green-100 text-green-800" : "bg-slate-200 text-slate-600"
+            }`}
+          >
+            {space.is_active ? "Actif" : "Inactif"}
+          </span>
+        </div>
+        {space.description && <p className="mt-3 text-sm text-slate-600">{space.description}</p>}
+      </div>
+
+      <dl className="mt-5 divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm">
+        {(
+          [
+            ["Capacité", `${space.capacity} personne(s)`],
+            ["Mode de réservation", space.booking_mode === "seats" ? "Par place" : "Espace entier"],
+            ["Surface", space.area_m2 ? `${space.area_m2} m²` : null],
+            ["Emplacement", space.location],
+            ["Tarifs", summary || null],
+          ] as const
+        ).map(([label, value]) => (
+          <div key={label} className="flex justify-between gap-4 px-4 py-3">
+            <dt className="text-slate-500">{label}</dt>
+            <dd className="text-right font-medium">{value || "—"}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="mt-4">
+        <p className="mb-2 text-sm font-medium">Équipements</p>
+        {space.amenities.length ? (
+          <div className="flex flex-wrap gap-1.5">
+            {space.amenities.map((a) => (
+              <span key={a} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">
+                {amenityLabel(a)}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">Aucun équipement renseigné.</p>
+        )}
+      </div>
+
+      <div className="mt-6 grid gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+        >
+          Modifier
+        </button>
+        <button
+          type="button"
+          onClick={onToggle}
+          className={`rounded-lg border px-4 py-2.5 text-sm font-semibold ${
+            space.is_active
+              ? "border-red-200 text-red-700 hover:bg-red-50"
+              : "border-green-200 text-green-700 hover:bg-green-50"
+          }`}
+        >
+          {space.is_active ? "Désactiver" : "Activer"}
+        </button>
+      </div>
+    </Overlay>
   );
 }
