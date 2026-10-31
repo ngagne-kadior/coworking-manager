@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import LogoutButton from "@/components/LogoutButton";
+import Link from "next/link";
 
 type Member = {
   id: string;
@@ -119,6 +120,10 @@ export default function MembersPage() {
   }, []);
 
   useEffect(() => {
+    // Chargement initial des données depuis Supabase. L'état « loading »
+    // vaut déjà true au premier rendu : le setLoading(true) synchrone de
+    // loadMembers ne provoque aucun rendu supplémentaire.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadMembers();
   }, [loadMembers]);
 
@@ -434,12 +439,12 @@ export default function MembersPage() {
               {loading ? "Actualisation..." : "Actualiser"}
             </button>
 
-            <a
-             href="/"
+            <Link
+              href="/"
               className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
             >
               Retour au tableau de bord
-            </a>
+            </Link>
 
             <LogoutButton />
           </div>
@@ -855,7 +860,7 @@ export default function MembersPage() {
 
             {historyLoading ? (
               <p className="mt-6 text-sm text-slate-500">
-                Chargement de l'historique...
+                Chargement de l&apos;historique...
               </p>
             ) : reservationHistory.length === 0 ? (
               <div className="mt-6 rounded-lg bg-slate-50 p-6 text-center">
@@ -863,7 +868,7 @@ export default function MembersPage() {
                   Aucune réservation enregistrée
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  L'historique de ce membre est vide.
+                  L&apos;historique de ce membre est vide.
                 </p>
               </div>
             ) : (
