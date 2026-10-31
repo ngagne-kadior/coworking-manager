@@ -5,8 +5,10 @@ import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
 import PhotoButton from "@/components/PhotoButton";
 import { SPACE_BUCKET, removePhoto, replacePhoto, spacePhotoUrl } from "@/lib/photos";
+import RatesDialog, { ratesSummary } from "@/components/RatesDialog";
+import type { SpaceRate } from "@/lib/payments";
 
-const SPACE_FIELDS = "id, name, description, capacity, is_active, photo_path";
+const SPACE_FIELDS = "id, name, description, capacity, is_active, photo_path, booking_mode";
 
 type Space = {
   id: string;
@@ -15,6 +17,7 @@ type Space = {
   capacity: number;
   is_active: boolean;
   photo_path: string | null;
+  booking_mode: "whole" | "seats";
 };
 
 export default function SpacesPage() {
@@ -26,10 +29,30 @@ export default function SpacesPage() {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
+  const [rates, setRates] = useState<SpaceRate[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [ratesFor, setRatesFor] = useState<Space | null>(null);
+
+  // Tarifs et rôle (seul l'admin modifie les tarifs ; la base le vérifie aussi)
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      supabase.from("space_rates").select("space_id, unit, price"),
+      supabase.rpc("current_app_role"),
+    ]).then(([rateRes, roleRes]) => {
+      if (!active) return;
+      setRates((rateRes.data ?? []) as SpaceRate[]);
+      setIsAdmin(roleRes.data === "admin");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [capacity, setCapacity] = useState("1");
+  const [bookingMode, setBookingMode] = useState<"whole" | "seats">("whole");
 
   const loadSpaces = useCallback(async () => {
     setLoading(true);
@@ -67,6 +90,7 @@ export default function SpacesPage() {
     setName("");
     setDescription("");
     setCapacity("1");
+    setBookingMode("whole");
   }
 
   function startEditing(space: Space) {
@@ -74,6 +98,7 @@ export default function SpacesPage() {
     setName(space.name);
     setDescription(space.description ?? "");
     setCapacity(String(space.capacity));
+    setBookingMode(space.booking_mode);
     setError("");
     setSuccess("");
 
@@ -109,6 +134,7 @@ export default function SpacesPage() {
             name: cleanName,
             description: cleanDescription || null,
             capacity: parsedCapacity,
+            booking_mode: bookingMode,
           })
           .eq("id", editingId)
           .select(SPACE_FIELDS)
@@ -137,6 +163,7 @@ export default function SpacesPage() {
             name: cleanName,
             description: cleanDescription || null,
             capacity: parsedCapacity,
+            booking_mode: bookingMode,
             is_active: true,
           })
           .select(SPACE_FIELDS)
@@ -354,6 +381,39 @@ export default function SpacesPage() {
               />
             </div>
 
+            <fieldset>
+              <legend className="mb-2 block text-sm font-medium">Mode de réservation</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    ["whole", "Espace entier", "Une réservation bloque tout l'espace (salle de réunion, bureau privé)."],
+                    ["seats", "Par place", "Plusieurs membres en même temps, jusqu'à la capacité (open space)."],
+                  ] as const
+                ).map(([value, label, help]) => (
+                  <label
+                    key={value}
+                    className={`cursor-pointer rounded-lg border p-3 text-sm transition ${
+                      bookingMode === value
+                        ? "border-blue-600 bg-blue-50"
+                        : "border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 font-medium">
+                      <input
+                        type="radio"
+                        name="bookingMode"
+                        value={value}
+                        checked={bookingMode === value}
+                        onChange={() => setBookingMode(value)}
+                      />
+                      {label}
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">{help}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
             <div className="flex flex-wrap gap-3">
               <button
                 type="submit"
@@ -486,11 +546,18 @@ export default function SpacesPage() {
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="font-semibold text-slate-900">{space.name}</h3>
                         <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                          {space.capacity} pers.
+                          {space.booking_mode === "seats"
+                            ? `${space.capacity} places`
+                            : `${space.capacity} pers. · entier`}
                         </span>
                       </div>
                       <p className="mt-2 line-clamp-2 min-h-10 text-sm text-slate-500">
                         {space.description || "Aucune description."}
+                      </p>
+                      <p className="mt-3 text-xs font-medium text-slate-700">
+                        {ratesSummary(rates.filter((r) => r.space_id === space.id)) || (
+                          <span className="font-normal text-slate-400">Aucun tarif défini</span>
+                        )}
                       </p>
 
                       <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
@@ -501,6 +568,15 @@ export default function SpacesPage() {
                         >
                           Modifier
                         </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setRatesFor(space)}
+                            className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                          >
+                            Tarifs
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => void toggleActive(space)}
@@ -531,6 +607,22 @@ export default function SpacesPage() {
           )}
         </section>
       </div>
+      {ratesFor && (
+        <RatesDialog
+          spaceId={ratesFor.id}
+          spaceName={ratesFor.name}
+          rates={rates.filter((r) => r.space_id === ratesFor.id)}
+          onClose={() => setRatesFor(null)}
+          onSaved={(saved) => {
+            setRates((current) => [
+              ...current.filter((r) => r.space_id !== ratesFor.id),
+              ...saved,
+            ]);
+            setSuccess(`Tarifs de « ${ratesFor.name} » enregistrés.`);
+            setRatesFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }
