@@ -1,9 +1,9 @@
 
 "use client";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import LogoutButton from "@/components/LogoutButton";
+import { PageHeader } from "@/components/AppShell";
+import Avatar from "@/components/Avatar";
 
 type Member = {
   id: string;
@@ -35,7 +35,7 @@ type Reservation = {
   expires_at: string | null;
   status: ReservationStatus;
   notes: string | null;
-  members: { full_name: string } | null;
+  members: { full_name: string; photo_path: string | null } | null;
   spaces: { name: string } | null;
 };
 
@@ -72,7 +72,6 @@ function isExpired(reservation: Reservation) {
 }
 
 export default function ReservationsPage() {
-  const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -110,7 +109,7 @@ export default function ReservationsPage() {
           supabase
             .from("reservations")
             .select(
-              "id, member_id, space_id, start_at, end_at, expires_at, status, notes, members(full_name), spaces(name)"
+              "id, member_id, space_id, start_at, end_at, expires_at, status, notes, members(full_name, photo_path), spaces(name)"
             )
             .order("created_at", { ascending: false }),
         ]);
@@ -360,25 +359,12 @@ export default function ReservationsPage() {
         );
 
   return (
-    <main className="min-h-screen bg-slate-50 p-5 text-slate-900 md:p-10">
+    <div className="text-slate-900">
       <div className="mx-auto max-w-7xl">
-        <header>
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <button
-  type="button"
-  onClick={() => router.push("/")}
-  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
->
-  <span className="text-lg">←</span>
-  Tableau de bord
-        </button>
-            <LogoutButton />
-          </div>
-          <h1 className="text-3xl font-bold">Réservations</h1>
-          <p className="mt-2 text-slate-600">
-            Crée et gère les réservations des espaces de coworking.
-          </p>
-        </header>
+        <PageHeader
+          title="Réservations"
+          description="Crée et gère les réservations des espaces de coworking."
+        />
 
         {error && (
           <p
@@ -579,9 +565,15 @@ export default function ReservationsPage() {
                         key={reservation.id}
                         className="border-t border-slate-100"
                       >
-                        <td className="p-4 font-medium">
-                          {reservation.members?.full_name ??
-                            "Membre indisponible"}
+                        <td className="p-4 font-medium text-slate-800">
+                          <div className="flex items-center gap-3">
+                            <Avatar
+                              name={reservation.members?.full_name ?? "?"}
+                              photoPath={reservation.members?.photo_path}
+                              size="sm"
+                            />
+                            {reservation.members?.full_name ?? "Membre indisponible"}
+                          </div>
                         </td>
                         <td className="p-4">
                           {reservation.spaces?.name ?? "Espace indisponible"}
@@ -672,6 +664,6 @@ export default function ReservationsPage() {
           )}
         </section>
       </div>
-    </main>
+    </div>
   );
 }

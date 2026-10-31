@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import LogoutButton from "@/components/LogoutButton";
-import Link from "next/link";
+import { PageHeader } from "@/components/AppShell";
+import Avatar from "@/components/Avatar";
+import PhotoButton from "@/components/PhotoButton";
+import { MEMBER_BUCKET, removePhoto, replacePhoto } from "@/lib/photos";
 
 type Member = {
   id: string;
@@ -13,6 +15,7 @@ type Member = {
   company: string | null;
   is_active: boolean;
   created_at: string;
+  photo_path: string | null;
 };
 
 type Reservation = {
@@ -24,7 +27,7 @@ type Reservation = {
 };
 
 const MEMBER_FIELDS =
-  "id, full_name, email, phone, company, is_active, created_at";
+  "id, full_name, email, phone, company, is_active, created_at, photo_path";
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "—";
@@ -88,6 +91,7 @@ export default function MembersPage() {
 
   // Activation / désactivation
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
 
   // Historique des réservations
   const [historyMember, setHistoryMember] = useState<Member | null>(null);
@@ -362,6 +366,52 @@ export default function MembersPage() {
   }
 
   // Consulter l'historique des réservations
+  async function changeMemberPhoto(member: Member, file: File) {
+    resetMessages();
+    setPhotoBusyId(member.id);
+    try {
+      const path = await replacePhoto({
+        bucket: MEMBER_BUCKET,
+        table: "members",
+        id: member.id,
+        file,
+        maxSide: 480,
+        previousPath: member.photo_path,
+      });
+      setMembers((current) =>
+        current.map((item) => (item.id === member.id ? { ...item, photo_path: path } : item))
+      );
+      setSuccess(`Photo de ${member.full_name} enregistrée.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Envoi de la photo impossible.");
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
+
+  async function deleteMemberPhoto(member: Member) {
+    if (!member.photo_path) return;
+    if (!window.confirm(`Retirer la photo de ${member.full_name} ?`)) return;
+    resetMessages();
+    setPhotoBusyId(member.id);
+    try {
+      await removePhoto({
+        bucket: MEMBER_BUCKET,
+        table: "members",
+        id: member.id,
+        path: member.photo_path,
+      });
+      setMembers((current) =>
+        current.map((item) => (item.id === member.id ? { ...item, photo_path: null } : item))
+      );
+      setSuccess(`Photo de ${member.full_name} retirée.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Suppression impossible.");
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
+
   async function viewReservationHistory(member: Member) {
     resetMessages();
 
@@ -411,25 +461,12 @@ export default function MembersPage() {
   const inactiveCount = members.length - activeCount;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 sm:px-6 lg:px-8">
+    <div className="text-slate-900">
       <div className="mx-auto max-w-7xl">
-        {/* En-tête */}
-        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-blue-600">
-              Coworking Manager
-            </p>
-
-            <h1 className="mt-1 text-3xl font-bold tracking-tight">
-              Gestion des membres
-            </h1>
-
-            <p className="mt-2 text-sm text-slate-600">
-              Ajouter, modifier et consulter les membres et leurs réservations.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
+        <PageHeader
+          title="Membres"
+          description="Ajoute, modifie et consulte les membres et leurs réservations."
+          actions={
             <button
               type="button"
               onClick={() => void loadMembers()}
@@ -438,17 +475,8 @@ export default function MembersPage() {
             >
               {loading ? "Actualisation..." : "Actualiser"}
             </button>
-
-            <Link
-              href="/"
-              className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
-            >
-              Retour au tableau de bord
-            </Link>
-
-            <LogoutButton />
-          </div>
-        </header>
+          }
+        />
 
         {/* Messages */}
         {error && (
@@ -663,26 +691,62 @@ export default function MembersPage() {
                         className="align-top hover:bg-slate-50/70"
                       >
                         <td className="p-4">
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              value={editFullName}
-                              onChange={(event) =>
-                                setEditFullName(event.target.value)
+                          <div className="flex items-start gap-3">
+                            <PhotoButton
+                              label={
+                                member.photo_path
+                                  ? `Changer la photo de ${member.full_name}`
+                                  : `Ajouter une photo pour ${member.full_name}`
                               }
-                              aria-label="Nom complet"
-                              className="w-48 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                            />
-                          ) : (
-                            <div>
-                              <p className="font-semibold text-slate-900">
-                                {member.full_name}
-                              </p>
-                              <p className="mt-1 text-xs text-slate-400">
-                                ID : {member.id.slice(0, 8)}
-                              </p>
-                            </div>
-                          )}
+                              disabled={photoBusyId === member.id}
+                              onFile={(file) => void changeMemberPhoto(member, file)}
+                              className="group relative shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+                            >
+                              <Avatar
+                                name={member.full_name}
+                                photoPath={member.photo_path}
+                                size="md"
+                              />
+                              <span
+                                aria-hidden="true"
+                                className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-[10px] text-white opacity-80 transition group-hover:opacity-100"
+                              >
+                                {photoBusyId === member.id ? "…" : "+"}
+                              </span>
+                            </PhotoButton>
+
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  value={editFullName}
+                                  onChange={(event) =>
+                                    setEditFullName(event.target.value)
+                                  }
+                                  aria-label="Nom complet"
+                                  className="w-48 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
+                                />
+                                {member.photo_path && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void deleteMemberPhoto(member)}
+                                    className="block text-xs font-medium text-red-600 hover:underline"
+                                  >
+                                    Retirer la photo
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="font-semibold text-slate-900">
+                                  {member.full_name}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-400">
+                                  ID : {member.id.slice(0, 8)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </td>
 
                         <td className="p-4 text-slate-600">
@@ -916,6 +980,6 @@ export default function MembersPage() {
           Coworking Manager — Gestion des membres
         </p>
       </div>
-    </main>
+    </div>
   );
 }
