@@ -31,8 +31,15 @@ export default async function proxy(request: NextRequest) {
   // Vérifie la session (et la rafraîchit si nécessaire).
   // Les données restent protégées par le RLS de Supabase :
   // ce contrôle sert à rediriger proprement, pas à sécuriser la base.
-  const { data } = await supabase.auth.getClaims();
-  const isLoggedIn = Boolean(data?.claims?.sub);
+  let isLoggedIn = false;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    isLoggedIn = Boolean(data?.claims?.sub);
+  } catch {
+    // Cookie de session illisible ou corrompu : on le traite comme une
+    // absence de connexion (redirection vers /login) au lieu d'une erreur 500.
+    isLoggedIn = false;
+  }
 
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some(

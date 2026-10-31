@@ -1,9 +1,12 @@
 
 "use client";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import LogoutButton from "@/components/LogoutButton";
+import { PageHeader } from "@/components/AppShell";
+import PhotoButton from "@/components/PhotoButton";
+import { SPACE_BUCKET, removePhoto, replacePhoto, spacePhotoUrl } from "@/lib/photos";
+
+const SPACE_FIELDS = "id, name, description, capacity, is_active, photo_path";
 
 type Space = {
   id: string;
@@ -11,10 +14,10 @@ type Space = {
   description: string | null;
   capacity: number;
   is_active: boolean;
+  photo_path: string | null;
 };
 
 export default function SpacesPage() {
-  const router = useRouter();
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -22,6 +25,7 @@ export default function SpacesPage() {
   const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -34,7 +38,7 @@ export default function SpacesPage() {
     try {
       const { data, error } = await supabase
         .from("spaces")
-        .select("id, name, description, capacity, is_active")
+        .select(SPACE_FIELDS)
         .order("name");
 
       if (error) {
@@ -107,7 +111,7 @@ export default function SpacesPage() {
             capacity: parsedCapacity,
           })
           .eq("id", editingId)
-          .select("id, name, description, capacity, is_active")
+          .select(SPACE_FIELDS)
           .maybeSingle();
 
         if (error) {
@@ -125,7 +129,7 @@ export default function SpacesPage() {
         setSpaces((current) =>
           current.map((space) => (space.id === data.id ? data : space))
         );
-        setSuccess("Les modifications ont été enregistrées dans Supabase.");
+        setSuccess("Modifications enregistrées.");
       } else {
         const { data, error } = await supabase
           .from("spaces")
@@ -135,7 +139,7 @@ export default function SpacesPage() {
             capacity: parsedCapacity,
             is_active: true,
           })
-          .select("id, name, description, capacity, is_active")
+          .select(SPACE_FIELDS)
           .single();
 
         if (error) {
@@ -146,7 +150,7 @@ export default function SpacesPage() {
         setSpaces((current) =>
           [...current, data].sort((a, b) => a.name.localeCompare(b.name))
         );
-        setSuccess("L'espace a été ajouté dans Supabase.");
+        setSuccess("Espace ajouté. Ajoute maintenant sa photo depuis sa carte, plus bas.");
       }
 
       resetForm();
@@ -175,7 +179,7 @@ export default function SpacesPage() {
         .from("spaces")
         .update({ is_active: nextStatus })
         .eq("id", space.id)
-        .select("id, name, description, capacity, is_active")
+        .select(SPACE_FIELDS)
         .maybeSingle();
 
       if (error) {
@@ -204,6 +208,54 @@ export default function SpacesPage() {
     }
   }
 
+  async function changePhoto(space: Space, file: File) {
+    setError("");
+    setSuccess("");
+    setPhotoBusyId(space.id);
+    try {
+      const path = await replacePhoto({
+        bucket: SPACE_BUCKET,
+        table: "spaces",
+        id: space.id,
+        file,
+        maxSide: 1600,
+        previousPath: space.photo_path,
+      });
+      setSpaces((current) =>
+        current.map((item) => (item.id === space.id ? { ...item, photo_path: path } : item))
+      );
+      setSuccess(`Photo de « ${space.name} » enregistrée.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Envoi de la photo impossible.");
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
+
+  async function deletePhoto(space: Space) {
+    if (!space.photo_path) return;
+    if (!window.confirm(`Retirer la photo de « ${space.name} » ?`)) return;
+    setError("");
+    setSuccess("");
+    setPhotoBusyId(space.id);
+    try {
+      await removePhoto({
+        bucket: SPACE_BUCKET,
+        table: "spaces",
+        id: space.id,
+        path: space.photo_path,
+      });
+      setSpaces((current) =>
+        current.map((item) => (item.id === space.id ? { ...item, photo_path: null } : item))
+      );
+      setSuccess(`Photo de « ${space.name} » retirée.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Suppression impossible.");
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
+
   const filteredSpaces = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
 
@@ -217,31 +269,16 @@ export default function SpacesPage() {
   }, [spaces, search]);
 
   return (
-    <main className="min-h-screen bg-slate-50 p-5 text-slate-900 md:p-10">
+    <div className="text-slate-900">
       <div className="mx-auto max-w-6xl">
-        <header>
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-  <button
-    type="button"
-    onClick={() => router.push("/")}
-    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
-  >
-    <span className="text-lg">←</span>
-    Tableau de bord
-  </button>
-            <LogoutButton />
-          </div>
-
-  <h1 className="text-3xl font-bold">Espaces</h1>
-
-  <p className="mt-2 text-slate-600">
-    Gère les espaces de coworking.
-  </p>
-    </header>
+        <PageHeader
+          title="Espaces"
+          description="Gère les espaces de coworking et leurs photos."
+        />
         {error && (
           <p
             role="alert"
-            className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
           >
             {error}
           </p>
@@ -250,13 +287,13 @@ export default function SpacesPage() {
         {success && (
           <p
             role="status"
-            className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+            className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700"
           >
             {success}
           </p>
         )}
 
-        <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-semibold">
             {editingId ? "Modifier l'espace" : "Ajouter un espace"}
           </h2>
@@ -394,66 +431,106 @@ export default function SpacesPage() {
           )}
 
           {!loading && filteredSpaces.length > 0 && (
-            <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-slate-100 text-slate-600">
-                  <tr>
-                    <th className="p-4">Nom</th>
-                    <th className="p-4">Description</th>
-                    <th className="p-4">Capacité</th>
-                    <th className="p-4">Statut</th>
-                    <th className="p-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSpaces.map((space) => (
-                    <tr key={space.id} className="border-t border-slate-100">
-                      <td className="p-4 font-medium">{space.name}</td>
-                      <td className="max-w-xs p-4 text-slate-600">
-                        {space.description || "—"}
-                      </td>
-                      <td className="p-4">{space.capacity} personne(s)</td>
-                      <td className="p-4">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+            <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredSpaces.map((space) => {
+                const photoUrl = spacePhotoUrl(space.photo_path);
+                const busy = photoBusyId === space.id;
+
+                return (
+                  <article
+                    key={space.id}
+                    className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:shadow-md ${
+                      space.is_active ? "border-slate-200" : "border-slate-200 opacity-75"
+                    }`}
+                  >
+                    <div className="relative h-44 bg-gradient-to-br from-blue-50 to-slate-100">
+                      {photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- image Supabase Storage
+                        <img
+                          src={photoUrl}
+                          alt={`Photo de ${space.name}`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center gap-1 text-slate-400">
+                          <span className="text-3xl" aria-hidden="true">▧</span>
+                          <span className="text-xs font-medium">Pas encore de photo</span>
+                        </div>
+                      )}
+
+                      <span
+                        className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${
+                          space.is_active
+                            ? "bg-white/95 text-green-700"
+                            : "bg-slate-800/80 text-white"
+                        }`}
+                      >
+                        {space.is_active ? "Actif" : "Inactif"}
+                      </span>
+
+                      <PhotoButton
+                        label={space.photo_path ? "Changer la photo" : "Ajouter une photo"}
+                        disabled={busy}
+                        onFile={(file) => void changePhoto(space, file)}
+                        className="absolute bottom-3 right-3 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-white disabled:opacity-60"
+                      >
+                        {busy
+                          ? "Envoi..."
+                          : space.photo_path
+                            ? "Changer la photo"
+                            : "＋ Ajouter une photo"}
+                      </PhotoButton>
+                    </div>
+
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="font-semibold text-slate-900">{space.name}</h3>
+                        <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                          {space.capacity} pers.
+                        </span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 min-h-10 text-sm text-slate-500">
+                        {space.description || "Aucune description."}
+                      </p>
+
+                      <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+                        <button
+                          type="button"
+                          onClick={() => startEditing(space)}
+                          className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void toggleActive(space)}
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
                             space.is_active
-                              ? "bg-green-100 text-green-800"
-                              : "bg-slate-100 text-slate-600"
+                              ? "border-amber-200 text-amber-700 hover:bg-amber-50"
+                              : "border-green-200 text-green-700 hover:bg-green-50"
                           }`}
                         >
-                          {space.is_active ? "Actif" : "Inactif"}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-wrap gap-2">
+                          {space.is_active ? "Désactiver" : "Activer"}
+                        </button>
+                        {space.photo_path && (
                           <button
                             type="button"
-                            onClick={() => startEditing(space)}
-                            className="rounded-md border border-blue-200 px-3 py-2 font-medium text-blue-700 hover:bg-blue-50"
+                            disabled={busy}
+                            onClick={() => void deletePhoto(space)}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
                           >
-                            Modifier
+                            Retirer la photo
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => void toggleActive(space)}
-                            className={`rounded-md border px-3 py-2 font-medium ${
-                              space.is_active
-                                ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                                : "border-green-200 text-green-700 hover:bg-green-50"
-                            }`}
-                          >
-                            {space.is_active ? "Désactiver" : "Activer"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
       </div>
-    </main>
+    </div>
   );
 }

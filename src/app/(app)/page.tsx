@@ -4,7 +4,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import LogoutButton from "@/components/LogoutButton";
+import { PageHeader } from "@/components/AppShell";
+import Avatar from "@/components/Avatar";
+import { spacePhotoUrl } from "@/lib/photos";
 
 type Member = {
   id: string;
@@ -13,6 +15,7 @@ type Member = {
   phone: string | null;
   is_active: boolean;
   created_at: string;
+  photo_path: string | null;
 };
 
 type Space = {
@@ -21,6 +24,7 @@ type Space = {
   description: string | null;
   capacity: number;
   is_active: boolean;
+  photo_path: string | null;
 };
 
 type Reservation = {
@@ -31,7 +35,7 @@ type Reservation = {
   end_at: string;
   status: "pending" | "confirmed" | "cancelled" | "completed" | "expired";
   expires_at: string | null;
-  members: { full_name: string } | null;
+  members: { full_name: string; photo_path: string | null } | null;
   spaces: { name: string } | null;
 };
 
@@ -50,15 +54,6 @@ const statusStyles: Record<string, string> = {
   completed: "bg-slate-100 text-slate-600",
   expired: "bg-orange-50 text-orange-700",
 };
-
-const navigation = [
-  { label: "Tableau de bord", icon: "▦", path: "/" },
-  { label: "Membres", icon: "♙", path: "/members" },
-  { label: "Espaces", icon: "▤", path: "/spaces" },
-  { label: "Réservations", icon: "▣", path: "/reservations" },
-  { label: "Historique", icon: "◷", path: "/historique" },
-  { label: "Comptes", icon: "⚿", path: "/utilisateurs" },
-];
 
 function startOfDay() {
   const date = new Date();
@@ -79,15 +74,6 @@ function formatTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function initials(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 export default function Home() {
@@ -141,7 +127,7 @@ export default function Home() {
 
         supabase
           .from("spaces")
-          .select("id, name, description, capacity, is_active")
+          .select("id, name, description, capacity, is_active, photo_path")
           .order("name"),
 
         supabase
@@ -161,7 +147,7 @@ export default function Home() {
         supabase
           .from("reservations")
           .select(
-            "id, member_id, space_id, start_at, end_at, status, expires_at, members(full_name), spaces(name)"
+            "id, member_id, space_id, start_at, end_at, status, expires_at, members(full_name, photo_path), spaces(name)"
           )
           .in("status", ["pending", "confirmed"])
           .gte("start_at", now.toISOString())
@@ -170,7 +156,7 @@ export default function Home() {
 
         supabase
           .from("members")
-          .select("id, full_name, email, phone, is_active, created_at")
+          .select("id, full_name, email, phone, is_active, created_at, photo_path")
           .order("created_at", { ascending: false })
           .limit(5),
 
@@ -282,75 +268,13 @@ export default function Home() {
   const weekdayLabels = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
   return (
-    <div className="min-h-screen bg-[#f4f7fc] text-slate-800">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[250px] flex-col bg-[#111c36] text-white lg:flex">
-        <div className="flex h-[84px] items-center gap-3 border-b border-white/10 px-6">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500 text-xl font-bold">
-            C
-          </div>
-          <div>
-            <p className="text-lg font-bold tracking-wide">Coworking</p>
-            <p className="text-xs text-slate-400">MANAGER</p>
-          </div>
-        </div>
-
-        <div className="px-4 pt-8">
-          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-            Espace de travail
-          </p>
-
-          <nav className="space-y-1">
-            {navigation.map((item) => {
-              const active = item.path === "/";
-
-              return (
-                <button
-                  key={item.path}
-                  onClick={() => router.push(item.path)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm transition ${
-                    active
-                      ? "bg-blue-600 font-semibold text-white shadow-lg shadow-blue-950/30"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <span className="w-5 text-center text-lg">{item.icon}</span>
-                  {item.label}
-                  {active && (
-                    <span className="ml-auto h-2 w-2 rounded-full bg-white" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="mt-auto p-4">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300">
-              ?
-            </div>
-            <p className="text-sm font-semibold">Besoin d’aide ?</p>
-            <p className="mt-1 text-xs leading-5 text-slate-400">
-              Accède aux différentes sections pour gérer ton espace.
-            </p>
-          </div>
-          <p className="mt-5 text-center text-[10px] text-slate-500">
-            COWORKING MANAGER · V1.0
-          </p>
-        </div>
-      </aside>
-
-      <main className="min-h-screen lg:ml-[250px]">
-        <header className="sticky top-0 z-20 flex min-h-[76px] flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 bg-white/95 px-4 py-3 backdrop-blur sm:px-7 lg:px-9">
-          <div>
-            <p className="text-xs text-slate-400">Espace de travail /</p>
-            <h1 className="mt-1 text-lg font-bold text-slate-900">
-              Tableau de bord
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3 sm:gap-5">
-            <div className="relative hidden sm:block">
+    <div className="text-slate-800">
+        <PageHeader
+          title="Tableau de bord"
+          description="Vue d’ensemble de ton espace de coworking."
+          actions={
+            <>
+            <div className="relative w-full sm:w-auto">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                 ⌕
               </span>
@@ -358,7 +282,7 @@ export default function Home() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Rechercher un membre ou un espace..."
-                className="w-64 rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs outline-none transition focus:border-blue-400 focus:bg-white md:w-80"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-xs outline-none transition focus:border-blue-400 focus:bg-white sm:w-64 md:w-80"
               />
             </div>
 
@@ -369,12 +293,11 @@ export default function Home() {
             >
               {loading ? "Chargement..." : "↻ Actualiser"}
             </button>
+            </>
+          }
+        />
 
-            <LogoutButton className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50" />
-          </div>
-        </header>
-
-        <div className="space-y-7 p-4 sm:p-7 lg:p-9">
+        <div className="space-y-7">
           <section
             className="relative isolate overflow-hidden rounded-3xl bg-[#16294b] bg-cover bg-center px-6 py-8 text-white shadow-sm sm:px-9 sm:py-10"
             style={{
@@ -625,7 +548,14 @@ export default function Home() {
                         className="transition hover:bg-slate-50/70"
                       >
                         <td className="px-6 py-4 font-medium text-slate-800">
-                          {reservation.members?.full_name ?? "Membre inconnu"}
+                          <div className="flex items-center gap-3">
+                            <Avatar
+                              name={reservation.members?.full_name ?? "?"}
+                              photoPath={reservation.members?.photo_path}
+                              size="sm"
+                            />
+                            {reservation.members?.full_name ?? "Membre inconnu"}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-slate-600">
                           {reservation.spaces?.name ?? "Espace inconnu"}
@@ -683,20 +613,12 @@ export default function Home() {
                     Aucun membre correspondant.
                   </p>
                 ) : (
-                  filteredMembers.slice(0, 5).map((member, index) => (
+                  filteredMembers.slice(0, 5).map((member) => (
                     <div
                       key={member.id}
                       className="flex items-center gap-3 px-5 py-4"
                     >
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                          index % 2 === 0
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-violet-100 text-violet-700"
-                        }`}
-                      >
-                        {initials(member.full_name)}
-                      </div>
+                      <Avatar name={member.full_name} photoPath={member.photo_path} size="md" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-800">
                           {member.full_name}
@@ -746,25 +668,25 @@ export default function Home() {
                     Aucun espace actif correspondant.
                   </p>
                 ) : (
-                  filteredSpaces.map((space, index) => (
+                  filteredSpaces.map((space) => (
                     <div
                       key={space.id}
-                      className="rounded-xl border border-slate-100 p-4 transition hover:border-blue-200 hover:shadow-sm"
+                      className="overflow-hidden rounded-xl border border-slate-100 transition hover:border-blue-200 hover:shadow-sm"
                     >
-                      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg text-blue-600">
-                        {index % 2 === 0 ? "▤" : "⌂"}
-                      </div>
-                      <p className="font-semibold text-slate-800">
-                        {space.name}
-                      </p>
-                      <p className="mt-1 line-clamp-2 min-h-8 text-xs text-slate-500">
-                        {space.description || "Espace de travail"}
-                      </p>
-                      <div className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                        Capacité :{" "}
-                        <span className="font-semibold text-slate-800">
-                          {space.capacity}
-                        </span>
+                      <SpaceCover space={space} />
+                      <div className="p-4">
+                        <p className="font-semibold text-slate-800">
+                          {space.name}
+                        </p>
+                        <p className="mt-1 line-clamp-2 min-h-8 text-xs text-slate-500">
+                          {space.description || "Espace de travail"}
+                        </p>
+                        <div className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                          Capacité :{" "}
+                          <span className="font-semibold text-slate-800">
+                            {space.capacity}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))
@@ -779,23 +701,6 @@ export default function Home() {
           </footer>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-6 border-t border-slate-200 bg-white px-1 py-2 lg:hidden">
-          {navigation.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => router.push(item.path)}
-              className={`flex flex-col items-center gap-1 py-1 text-[10px] ${
-                item.path === "/"
-                  ? "font-semibold text-blue-600"
-                  : "text-slate-500"
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </main>
     </div>
   );
 }
@@ -841,5 +746,20 @@ function StatCard({
         {description}
       </p>
     </div>
+  );
+}
+
+function SpaceCover({ space }: { space: Space }) {
+  const url = spacePhotoUrl(space.photo_path);
+  if (!url) {
+    return (
+      <div className="flex h-28 items-center justify-center bg-gradient-to-br from-blue-50 to-slate-100 text-xs font-medium text-slate-400">
+        Pas encore de photo
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- image Supabase Storage
+    <img src={url} alt={`Photo de ${space.name}`} className="h-28 w-full object-cover" />
   );
 }

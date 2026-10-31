@@ -1,8 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import LogoutButton from "@/components/LogoutButton";
+import { PageHeader } from "@/components/AppShell";
 import {
   MIN_PASSWORD_LENGTH,
   ROLE_LABELS,
@@ -68,7 +67,6 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-blue-600";
 
 export default function UtilisateursPage() {
-  const router = useRouter();
 
   const [requestId, setRequestId] = useState(1);
   const [loadedId, setLoadedId] = useState(0);
@@ -237,26 +235,12 @@ export default function UtilisateursPage() {
   const accounts = result?.kind === "ok" ? result.accounts : [];
 
   return (
-    <main className="min-h-screen bg-slate-50 p-5 text-slate-900 md:p-10">
+    <div className="text-slate-900">
       <div className="mx-auto max-w-6xl">
-        <header>
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => router.push("/")}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
-            >
-              <span className="text-lg">←</span>
-              Tableau de bord
-            </button>
-            <LogoutButton />
-          </div>
-
-          <h1 className="text-3xl font-bold">Comptes utilisateurs</h1>
-          <p className="mt-2 text-slate-600">
-            Crée les comptes de ton équipe, attribue les rôles et gère les accès.
-          </p>
-        </header>
+        <PageHeader
+          title="Comptes utilisateurs"
+          description="Crée les comptes de ton équipe, attribue les rôles et gère les accès."
+        />
 
         {loading && !result && (
           <p className="mt-8 text-slate-600">Chargement des comptes...</p>
@@ -544,6 +528,6 @@ export default function UtilisateursPage() {
           </>
         )}
       </div>
-    </main>
+    </div>
   );
 }

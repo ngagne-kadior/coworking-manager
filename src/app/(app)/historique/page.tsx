@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import LogoutButton from "@/components/LogoutButton";
+import { PageHeader } from "@/components/AppShell";
 
 type AuditEntry = {
   id: number;
@@ -85,6 +84,7 @@ const FIELD_LABELS: Record<string, string> = {
   role: "Rôle",
   member_id: "Membre",
   space_id: "Espace",
+  photo_path: "Photo",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -119,6 +119,7 @@ function formatValue(field: string, value: unknown) {
   if (field === "start_at" || field === "end_at") {
     return formatDateTime(String(value));
   }
+  if (field === "photo_path") return "Photo";
   if (field === "member_id" || field === "space_id") {
     return `#${String(value).slice(0, 8)}`;
   }
@@ -227,7 +228,6 @@ function EntryDetails({ entry }: { entry: AuditEntry }) {
 }
 
 export default function HistoriquePage() {
-  const router = useRouter();
 
   const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -284,27 +284,12 @@ export default function HistoriquePage() {
     JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS);
 
   return (
-    <main className="min-h-screen bg-slate-50 p-5 text-slate-900 md:p-10">
+    <div className="text-slate-900">
       <div className="mx-auto max-w-6xl">
-        <header>
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => router.push("/")}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
-            >
-              <span className="text-lg">←</span>
-              Tableau de bord
-            </button>
-            <LogoutButton />
-          </div>
-
-          <h1 className="text-3xl font-bold">Historique des actions</h1>
-          <p className="mt-2 text-slate-600">
-            Toutes les créations et modifications, enregistrées automatiquement.
-            Cet historique ne peut pas être modifié.
-          </p>
-        </header>
+        <PageHeader
+          title="Historique des actions"
+          description="Toutes les créations et modifications, enregistrées automatiquement. Cet historique ne peut pas être modifié."
+        />
 
         <form
           onSubmit={(event) => {
@@ -477,6 +462,6 @@ export default function HistoriquePage() {
           )}
         </section>
       </div>
-    </main>
+    </div>
   );
 }
