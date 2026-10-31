@@ -37,7 +37,7 @@ export default function LoginPage() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, is_active")
         .eq("id", data.user.id)
         .maybeSingle();
 
@@ -47,13 +47,19 @@ export default function LoginPage() {
         return;
       }
 
+      if (!profile.is_active) {
+        await supabase.auth.signOut();
+        setError("Ce compte a été désactivé. Contacte l'administrateur.");
+        return;
+      }
+
       if (profile.role !== "admin" && profile.role !== "manager") {
         await supabase.auth.signOut();
         setError("Ce compte n'est pas autorisé à accéder au logiciel.");
         return;
       }
 
-      router.push("/members");
+      router.push("/");
       router.refresh();
     } catch {
       setError("Une erreur inattendue est survenue pendant la connexion.");

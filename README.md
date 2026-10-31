@@ -11,11 +11,15 @@ Next.js (App Router), React, TypeScript, Tailwind CSS, Supabase (Auth + base de 
    ```
    NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+   SUPABASE_SERVICE_ROLE_KEY=...
    ```
+   `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Project Settings → API → clé `service_role`)
+   sert uniquement à la page Comptes, côté serveur. Elle ne doit JAMAIS porter
+   le préfixe `NEXT_PUBLIC_`.
 3. `npm run dev` puis ouvrir http://localhost:3000
 
 ## Déploiement
-Vercel construit automatiquement chaque commit sur `main`. Les deux variables ci-dessus doivent être définies dans Vercel → Settings → Environment Variables.
+Vercel construit automatiquement chaque commit sur `main`. Les trois variables ci-dessus doivent être définies dans Vercel → Settings → Environment Variables, pour Production, Preview et Development.
 
 ## Sécurité
 - Toutes les pages sauf `/login` exigent une session (voir `src/proxy.ts`).
