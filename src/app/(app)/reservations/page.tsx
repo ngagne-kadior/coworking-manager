@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
 import Avatar from "@/components/Avatar";
+import ReservationTabs from "@/components/ReservationTabs";
 
 type Member = {
   id: string;
@@ -364,6 +365,7 @@ export default function ReservationsPage() {
         <PageHeader
           title="Réservations"
           description="Crée et gère les réservations des espaces de coworking."
+          actions={<ReservationTabs active="liste" />}
         />
 
         {error && (
