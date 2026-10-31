@@ -317,10 +317,10 @@ export default function Home() {
                 retrouve les informations essentielles de ton activité.
               </p>
               <button
-                onClick={() => router.push("/reservations")}
+                onClick={() => router.push("/reservations/calendrier")}
                 className="mt-6 rounded-xl bg-blue-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/20 transition hover:bg-blue-400"
               >
-                Voir les réservations <span className="ml-2">→</span>
+                Ouvrir le calendrier <span className="ml-2">→</span>
               </button>
             </div>
           </section>
