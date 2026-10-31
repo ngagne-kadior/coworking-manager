@@ -50,6 +50,7 @@ const TABLE_LABELS: Record<string, string> = {
   payments: "Paiement",
   space_rates: "Tarif",
   subscriptions: "Abonnement",
+  space_photos: "Photo d'espace",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -108,6 +109,12 @@ const FIELD_LABELS: Record<string, string> = {
   ends_on: "Fin",
   sessions: "Journées",
   booking_mode: "Mode de réservation",
+  space_type: "Type d'espace",
+  area_m2: "Surface (m²)",
+  location: "Emplacement",
+  amenities: "Équipements",
+  path: "Fichier",
+  position: "Ordre",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -143,7 +150,8 @@ function formatValue(field: string, value: unknown) {
   if (field === "start_at" || field === "end_at") {
     return formatDateTime(String(value));
   }
-  if (field === "photo_path") return "Photo";
+  if (field === "photo_path" || field === "path") return "Photo";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
   if (field === "amount" || field === "price" || field === "price_amount") {
     return `${new Intl.NumberFormat("fr-FR").format(Number(value))} F CFA`;
   }
