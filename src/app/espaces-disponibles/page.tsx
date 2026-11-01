@@ -7,6 +7,7 @@ import { BrandLockup } from "@/components/BrandMark";
 import { spacePhotoUrl } from "@/lib/photos";
 import {
   AMENITY_LABELS,
+  COVER_IMAGE_URL,
   SOCIALS,
   type PublicCatalog,
   type PublicSpace,
@@ -77,31 +78,43 @@ export default function EspacesDisponiblesPage() {
         </div>
       </header>
 
-      {/* Présentation */}
-      <section className="bg-[#111c36] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-9 sm:px-6 sm:py-16">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">Espaces de travail</p>
-          <h1 className="mt-3 max-w-2xl text-2xl font-bold leading-tight sm:text-4xl">
-            {settings?.tagline || `Trouve l'espace qui te convient chez ${name}`}
-          </h1>
-          {settings?.address && <p className="mt-3 text-sm text-slate-300">{settings.address}</p>}
-          <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href="#espaces"
-              className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-400 sm:px-5 sm:py-3"
-            >
-              Voir les espaces
-            </a>
-            {settings?.whatsapp && (
+      {/* Présentation : carte arrondie avec photo en fond (même style que le tableau de bord) */}
+      <section className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 sm:pt-8">
+        <div
+          className="relative isolate overflow-hidden rounded-3xl bg-[#16294b] bg-cover bg-center text-white shadow-sm"
+          style={{ backgroundImage: `url('${COVER_IMAGE_URL}')` }}
+        >
+          {/* Voile : uni sur téléphone (texte lisible), dégradé vers la droite sur ordinateur */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 -z-10 bg-[#0f1d37]/85 md:bg-transparent md:bg-[linear-gradient(90deg,rgba(15,29,55,.96)_0%,rgba(15,29,55,.84)_52%,rgba(15,29,55,.25)_100%)]"
+          />
+          <div className="max-w-2xl px-6 py-9 sm:px-10 sm:py-12 lg:py-14">
+            <span className="inline-flex rounded-full border border-blue-300/30 bg-blue-400/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-blue-200">
+              Espaces de travail
+            </span>
+            <h1 className="mt-4 text-2xl font-bold leading-tight sm:text-4xl">
+              {settings?.tagline || `Trouve l'espace qui te convient chez ${name}`}
+            </h1>
+            {settings?.address && <p className="mt-3 text-sm text-slate-200">{settings.address}</p>}
+            <div className="mt-6 flex flex-wrap gap-3">
               <a
-                href={whatsappLink(settings.whatsapp, `Bonjour ${name}, je souhaite des informations sur vos espaces.`)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10 sm:px-5 sm:py-3"
+                href="#espaces"
+                className="rounded-xl bg-blue-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/20 transition hover:bg-blue-400"
               >
-                Nous écrire sur WhatsApp
+                Voir les espaces <span className="ml-1">→</span>
               </a>
-            )}
+              {settings?.whatsapp && (
+                <a
+                  href={whatsappLink(settings.whatsapp, `Bonjour ${name}, je souhaite des informations sur vos espaces.`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-xl border border-white/30 bg-white/5 px-5 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
+                >
+                  Nous écrire sur WhatsApp
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </section>

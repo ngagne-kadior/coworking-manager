@@ -27,6 +27,10 @@ export type PublicCatalog = { settings: PublicSettings; spaces: PublicSpace[] };
 
 export const PUBLIC_PATH = "/espaces-disponibles";
 
+/** Photo de couverture (intérieur de bureaux), partagée entre le tableau de bord et la page publique. */
+export const COVER_IMAGE_URL =
+  "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=85";
+
 export const AMENITY_LABELS: Record<string, string> = {
   wifi: "Wi-Fi",
   clim: "Climatisation",
