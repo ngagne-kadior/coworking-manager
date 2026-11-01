@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
-import { PUBLIC_PATH } from "@/lib/public";
+import { normalizeSocial, PUBLIC_PATH, SOCIALS } from "@/lib/public";
 
 type Settings = {
   coworking_name: string;
@@ -14,7 +14,15 @@ type Settings = {
   email: string | null;
   address: string | null;
   public_requests_enabled: boolean;
+  facebook_url: string | null;
+  instagram_url: string | null;
+  tiktok_url: string | null;
+  linkedin_url: string | null;
+  youtube_url: string | null;
+  x_url: string | null;
 };
+
+type SocialColumn = "facebook_url" | "instagram_url" | "tiktok_url" | "linkedin_url" | "youtube_url" | "x_url";
 
 type Load = { kind: "loading" } | { kind: "forbidden" } | { kind: "error"; message: string } | { kind: "ok" };
 
@@ -31,6 +39,12 @@ export default function ParametresPage() {
     email: "",
     address: "",
     public_requests_enabled: true,
+    facebook_url: "",
+    instagram_url: "",
+    tiktok_url: "",
+    linkedin_url: "",
+    youtube_url: "",
+    x_url: "",
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -42,7 +56,9 @@ export default function ParametresPage() {
       supabase.rpc("current_app_role"),
       supabase
         .from("app_settings")
-        .select("coworking_name, tagline, whatsapp, phone, email, address, public_requests_enabled")
+        .select(
+          "coworking_name, tagline, whatsapp, phone, email, address, public_requests_enabled, facebook_url, instagram_url, tiktok_url, linkedin_url, youtube_url, x_url"
+        )
         .maybeSingle(),
     ]).then(([roleRes, settingsRes]) => {
       if (!active) return;
@@ -66,6 +82,12 @@ export default function ParametresPage() {
         phone: d.phone ?? "",
         email: d.email ?? "",
         address: d.address ?? "",
+        facebook_url: d.facebook_url ?? "",
+        instagram_url: d.instagram_url ?? "",
+        tiktok_url: d.tiktok_url ?? "",
+        linkedin_url: d.linkedin_url ?? "",
+        youtube_url: d.youtube_url ?? "",
+        x_url: d.x_url ?? "",
       });
       setLoad({ kind: "ok" });
     });
@@ -87,6 +109,16 @@ export default function ParametresPage() {
       setMessage({ ok: false, text: "Le nom du coworking est obligatoire." });
       return;
     }
+    const socials: Partial<Record<SocialColumn, string | null>> = {};
+    for (const social of SOCIALS) {
+      const column = social.column as SocialColumn;
+      const value = normalizeSocial(social.base, form[column] ?? "");
+      if (value === "invalid") {
+        setMessage({ ok: false, text: `Lien ${social.label} incorrect : colle le lien de ta page ou ton nom (@...).` });
+        return;
+      }
+      socials[column] = value;
+    }
     setSaving(true);
     const clean = (v: string | null) => (v && v.trim() ? v.trim() : null);
     const { error } = await supabase
@@ -99,10 +131,12 @@ export default function ParametresPage() {
         email: clean(form.email),
         address: clean(form.address),
         public_requests_enabled: form.public_requests_enabled,
+        ...socials,
         updated_at: new Date().toISOString(),
       })
       .eq("id", true);
     setSaving(false);
+    if (!error) setForm((f) => ({ ...f, ...socials }));
     setMessage(
       error
         ? { ok: false, text: `Enregistrement impossible : ${error.message}` }
@@ -243,6 +277,34 @@ export default function ParametresPage() {
                   />
                 </label>
               </div>
+
+              <fieldset className="rounded-lg border border-slate-200 p-4">
+                <legend className="px-1 text-sm font-medium">Réseaux sociaux</legend>
+                <p className="mb-3 text-xs text-slate-500">
+                  Colle le lien de ta page, ou tape juste ton nom (ex. @moncoworking). Laisse vide si tu n&apos;as
+                  pas ce réseau.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {SOCIALS.map((social) => {
+                    const column = social.column as SocialColumn;
+                    return (
+                      <label key={social.key} className="block text-sm">
+                        <span className="mb-1 block font-medium">{social.label}</span>
+                        <input
+                          value={form[column] ?? ""}
+                          onChange={(e) => set(column, e.target.value)}
+                          placeholder={social.placeholder}
+                          maxLength={300}
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          className={fieldClass}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
 
               <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 text-sm">
                 <input

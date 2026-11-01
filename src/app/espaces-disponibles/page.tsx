@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { spacePhotoUrl } from "@/lib/photos";
 import {
   AMENITY_LABELS,
+  SOCIALS,
   type PublicCatalog,
   type PublicSpace,
   whatsappLink,
@@ -48,6 +49,10 @@ export default function EspacesDisponiblesPage() {
   const catalog = state.kind === "ok" ? state.catalog : null;
   const settings = catalog?.settings;
   const name = settings?.coworking_name ?? "Coworking";
+  const socialLinks = SOCIALS.flatMap((s) => {
+    const url = settings?.socials?.[s.key];
+    return url && url.startsWith("https://") ? [{ ...s, url }] : [];
+  });
 
   const types = useMemo(
     () => Array.from(new Set((catalog?.spaces ?? []).map((s) => s.space_type).filter(Boolean))) as string[],
@@ -194,8 +199,29 @@ export default function EspacesDisponiblesPage() {
 
       {/* Pied de page */}
       <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-8 text-sm text-slate-500 sm:flex-row sm:justify-between sm:px-6">
-          <p className="font-semibold text-slate-700">{name}</p>
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 text-sm text-slate-500 sm:flex-row sm:justify-between sm:px-6">
+          <div>
+            <p className="font-semibold text-slate-700">{name}</p>
+            {socialLinks.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Suivez-nous</p>
+                <ul className="flex flex-wrap gap-2">
+                  {socialLinks.map((s) => (
+                    <li key={s.key}>
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`inline-block rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-sm transition hover:opacity-85 ${s.style}`}
+                      >
+                        {s.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <div className="flex flex-col gap-1 sm:items-end">
             {settings?.address && <span>{settings.address}</span>}
             {settings?.phone && (
