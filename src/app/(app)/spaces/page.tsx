@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
 import PhotoButton from "@/components/PhotoButton";
@@ -789,6 +789,40 @@ function SpaceDetails({
     photos[0] ??
     null;
   const selectedUrl = spacePhotoUrl(selected?.path ?? null);
+  const selectedIndex = selected ? photos.findIndex((p) => p.id === selected.id) : -1;
+  const canBrowse = photos.length > 1;
+
+  // Photo précédente / suivante (la galerie boucle : après la dernière, la première)
+  const goTo = useCallback(
+    (delta: number) => {
+      if (photos.length < 2 || selectedIndex < 0) return;
+      const next = (selectedIndex + delta + photos.length) % photos.length;
+      setSelectedId(photos[next].id);
+    },
+    [photos, selectedIndex]
+  );
+
+  // Flèches du clavier (sauf pendant une saisie)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (event.key === "ArrowLeft") goTo(-1);
+      if (event.key === "ArrowRight") goTo(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goTo]);
+
+  // Glisser du doigt sur téléphone
+  const touchStartX = useRef<number | null>(null);
+
+  // La miniature de la photo affichée reste visible dans la bande
+  const thumbsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const thumb = thumbsRef.current?.querySelector<HTMLElement>(`[data-photo-id="${selected?.id}"]`);
+    thumb?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [selected?.id]);
 
   async function add(file: File) {
     setError("");
@@ -844,10 +878,27 @@ function SpaceDetails({
     <Overlay title="Fiche espace" side onClose={onClose}>
       {/* Galerie */}
       <div className="overflow-hidden rounded-xl bg-slate-100">
-        <div className="relative aspect-[4/3]">
+        <div
+          className="relative aspect-[4/3] select-none"
+          onTouchStart={(event) => {
+            touchStartX.current = event.touches[0].clientX;
+          }}
+          onTouchEnd={(event) => {
+            if (touchStartX.current === null) return;
+            const dx = event.changedTouches[0].clientX - touchStartX.current;
+            touchStartX.current = null;
+            if (Math.abs(dx) > 40) goTo(dx < 0 ? 1 : -1);
+          }}
+        >
           {selectedUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- image Supabase Storage
-            <img src={selectedUrl} alt={`Photo de ${space.name}`} className="h-full w-full object-cover" />
+            <img
+              key={selectedUrl}
+              src={selectedUrl}
+              alt={`Photo ${selectedIndex + 1} de ${space.name}`}
+              draggable={false}
+              className="h-full w-full object-cover"
+            />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-slate-400">Aucune photo</div>
           )}
@@ -856,14 +907,42 @@ function SpaceDetails({
               Couverture
             </span>
           )}
+
+          {canBrowse && (
+            <>
+              <button
+                type="button"
+                onClick={() => goTo(-1)}
+                aria-label="Photo précédente"
+                className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-xl font-bold text-slate-800 shadow-md transition hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={() => goTo(1)}
+                aria-label="Photo suivante"
+                className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-xl font-bold text-slate-800 shadow-md transition hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                ›
+              </button>
+              <span
+                aria-live="polite"
+                className="absolute bottom-3 right-3 rounded-full bg-slate-900/70 px-2.5 py-1 text-xs font-medium text-white"
+              >
+                {selectedIndex + 1} / {photos.length}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+      <div ref={thumbsRef} className="mt-3 flex gap-2 overflow-x-auto pb-1">
         {photos.map((photo, index) => (
           <button
             key={photo.id}
             type="button"
+            data-photo-id={photo.id}
             onClick={() => setSelectedId(photo.id)}
             aria-label={`Voir la photo ${index + 1}`}
             className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 ${
