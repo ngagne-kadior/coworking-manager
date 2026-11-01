@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { BrandMark } from "@/components/BrandMark";
 import { spacePhotoUrl } from "@/lib/photos";
 import {
   AMENITY_LABELS,
@@ -67,9 +68,7 @@ export default function EspacesDisponiblesPage() {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 font-bold text-white">
-              {name.charAt(0).toUpperCase()}
-            </span>
+            <BrandMark size="md" letter={name} />
             <span className="font-bold">{name}</span>
           </div>
           <Link

@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandMark } from "@/components/BrandMark";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -173,9 +174,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Menu latéral (ordinateur) */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-[#111c36] text-white lg:flex">
         <Link href="/" className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500 text-lg font-bold">
-            C
-          </span>
+          <BrandMark size="lg" letter="C" />
           <span>
             <span className="block text-base font-bold tracking-wide">Coworking</span>
             <span className="block text-[11px] tracking-[0.2em] text-slate-400">MANAGER</span>
@@ -221,9 +220,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Barre du haut (téléphone et tablette) */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
-            C
-          </span>
+          <BrandMark size="sm" letter="C" />
           <span className="text-sm font-bold text-slate-900">Coworking Manager</span>
         </Link>
         <LogoutButton className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:opacity-50" />
