@@ -2,7 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Pages accessibles sans être connecté.
-const PUBLIC_PATHS = ["/login"];
+// /espaces-disponibles : vitrine publique (les données passent par
+// get_public_catalog, qui ne renvoie que les espaces actifs).
+const PUBLIC_PATHS = ["/login", "/espaces-disponibles"];
 
 export default async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -48,7 +50,9 @@ export default async function proxy(request: NextRequest) {
 
   if (!isLoggedIn && !isPublic) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    // L'adresse du site mène les visiteurs à la vitrine ; les autres pages
+    // internes mènent à la connexion.
+    url.pathname = path === "/" ? "/espaces-disponibles" : "/login";
     url.search = "";
     return NextResponse.redirect(url);
   }

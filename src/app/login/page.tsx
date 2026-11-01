@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -78,6 +79,13 @@ export default function LoginPage() {
         <p className="mt-2 text-slate-600">
           Connecte-toi à ton espace de gestion.
         </p>
+
+        <Link
+          href="/espaces-disponibles"
+          className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
+        >
+          ← Voir nos espaces (clients)
+        </Link>
 
         <form onSubmit={handleLogin} className="mt-8 space-y-5">
           <div>
