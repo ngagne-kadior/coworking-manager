@@ -70,6 +70,28 @@ const EMPTY_RATES: Record<RateUnit, string> = { hour: "", half_day: "", day: "",
 
 // ---------- Page ----------
 
+type LiveReservation = { space_id: string; start_at: string; end_at: string; seats: number | null };
+
+/** Statut affiché sur la carte : Inactif, Réservé (en ce moment), places occupées, ou Actif. */
+function liveStatus(space: Space, seatsNow: number) {
+  if (!space.is_active) return { label: "Inactif", card: "bg-slate-800/80 text-white", pill: "bg-slate-200 text-slate-600" };
+  if (seatsNow > 0 && space.booking_mode === "seats" && seatsNow < space.capacity) {
+    return {
+      label: `${seatsNow}/${space.capacity} places occupées`,
+      card: "bg-amber-400 text-amber-950",
+      pill: "bg-amber-100 text-amber-800",
+    };
+  }
+  if (seatsNow > 0) {
+    return {
+      label: space.booking_mode === "seats" ? "Complet" : "Réservé",
+      card: "bg-orange-500 text-white",
+      pill: "bg-orange-100 text-orange-800",
+    };
+  }
+  return { label: "Actif", card: "bg-white/95 text-green-700", pill: "bg-green-100 text-green-800" };
+}
+
 export default function SpacesPage() {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [rates, setRates] = useState<SpaceRate[]>([]);
@@ -81,9 +103,31 @@ export default function SpacesPage() {
   const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(true);
+  const [live, setLive] = useState<LiveReservation[]>([]);
+  const [now, setNow] = useState(() => Date.now());
 
   const [formFor, setFormFor] = useState<Space | "new" | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
+
+  // Réservations en cours ou à venir dans les 24 h (hors annulées / expirées).
+  const loadLive = useCallback(async () => {
+    const from = new Date();
+    const to = new Date(from.getTime() + 24 * 3600 * 1000);
+    const { data } = await supabase
+      .from("reservations")
+      .select("space_id, start_at, end_at, seats")
+      .lt("start_at", to.toISOString())
+      .gt("end_at", from.toISOString())
+      .not("status", "in", "(cancelled,expired)");
+    setLive((data ?? []) as LiveReservation[]);
+    setNow(Date.now());
+  }, []);
+
+  // Mise à jour automatique chaque minute : une réservation terminée ne compte plus.
+  useEffect(() => {
+    const timer = window.setInterval(() => void loadLive(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [loadLive]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,6 +137,7 @@ export default function SpacesPage() {
       supabase.from("space_rates").select("space_id, unit, price"),
       supabase.from("space_photos").select("id, space_id, path, position").order("position"),
       supabase.rpc("current_app_role"),
+      loadLive(),
     ]);
     const firstError = spaceRes.error ?? rateRes.error ?? photoRes.error;
     if (firstError) {
@@ -104,7 +149,7 @@ export default function SpacesPage() {
     }
     setIsAdmin(roleRes.data === "admin");
     setLoading(false);
-  }, []);
+  }, [loadLive]);
 
   useEffect(() => {
     // Chargement initial : « loading » vaut déjà true au premier rendu.
@@ -125,7 +170,16 @@ export default function SpacesPage() {
   }, [spaces, search, showInactive]);
 
   const activeCount = spaces.filter((s) => s.is_active).length;
-  const totalCapacity = spaces.filter((s) => s.is_active).reduce((sum, s) => sum + s.capacity, 0);
+  const seatsNow = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of live) {
+      if (new Date(r.start_at).getTime() <= now && now < new Date(r.end_at).getTime()) {
+        map.set(r.space_id, (map.get(r.space_id) ?? 0) + (r.seats ?? 1));
+      }
+    }
+    return map;
+  }, [live, now]);
+  const bookedNowCount = spaces.filter((s) => s.is_active && (seatsNow.get(s.id) ?? 0) > 0).length;
 
   function photosOf(spaceId: string) {
     return photos.filter((p) => p.space_id === spaceId).sort((a, b) => a.position - b.position);
@@ -206,7 +260,7 @@ export default function SpacesPage() {
             [
               ["Espaces", String(spaces.length), "text-slate-900"],
               ["Espaces actifs", String(activeCount), "text-green-600"],
-              ["Capacité totale", `${totalCapacity} pers.`, "text-blue-700"],
+              ["Réservés maintenant", `${bookedNowCount} / ${activeCount}`, "text-orange-600"],
             ] as const
           ).map(([label, value, color]) => (
             <div key={label} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
@@ -271,10 +325,10 @@ export default function SpacesPage() {
                     )}
                     <span
                       className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm ${
-                        space.is_active ? "bg-white/95 text-green-700" : "bg-slate-800/80 text-white"
+                        liveStatus(space, seatsNow.get(space.id) ?? 0).card
                       }`}
                     >
-                      {space.is_active ? "Actif" : "Inactif"}
+                      {liveStatus(space, seatsNow.get(space.id) ?? 0).label}
                     </span>
                     <span className="absolute right-2 top-2 rounded-full bg-slate-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
                       {count}/{MAX_SPACE_PHOTOS}
@@ -318,6 +372,7 @@ export default function SpacesPage() {
       {detailsSpace && !formFor && (
         <SpaceDetails
           space={detailsSpace}
+          seatsNow={seatsNow.get(detailsSpace.id) ?? 0}
           photos={photosOf(detailsSpace.id)}
           rates={rates.filter((r) => r.space_id === detailsSpace.id)}
           onClose={() => setDetailsId(null)}
@@ -766,6 +821,7 @@ function SpaceDetails({
   space,
   photos,
   rates,
+  seatsNow,
   onClose,
   onEdit,
   onToggle,
@@ -774,6 +830,7 @@ function SpaceDetails({
   space: Space;
   photos: SpacePhoto[];
   rates: SpaceRate[];
+  seatsNow: number;
   onClose: () => void;
   onEdit: () => void;
   onToggle: () => void;
@@ -1004,12 +1061,8 @@ function SpaceDetails({
             <h3 className="text-xl font-bold">{space.name}</h3>
             <p className="text-sm text-slate-500">{space.space_type ?? "Type non précisé"}</p>
           </div>
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              space.is_active ? "bg-green-100 text-green-800" : "bg-slate-200 text-slate-600"
-            }`}
-          >
-            {space.is_active ? "Actif" : "Inactif"}
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${liveStatus(space, seatsNow).pill}`}>
+            {liveStatus(space, seatsNow).label}
           </span>
         </div>
         {space.description && <p className="mt-3 text-sm text-slate-600">{space.description}</p>}
