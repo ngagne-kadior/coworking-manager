@@ -66,6 +66,12 @@ const NAV: NavItem[] = [
     icon: <Icon d="M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1M8 12h2M14 12h2M8 16h2" />,
   },
   {
+    label: "Demandes",
+    short: "Demandes",
+    path: "/demandes",
+    icon: <Icon d="M4 5h16v11H8l-4 4zM8 9h8M8 12h5" />,
+  },
+  {
     label: "Abonnements",
     short: "Abonn.",
     path: "/abonnements",
@@ -90,6 +96,13 @@ const NAV: NavItem[] = [
     adminOnly: true,
     icon: <Icon d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6zM9.5 12l1.8 1.8L15 10" />,
   },
+  {
+    label: "Paramètres",
+    short: "Paramètres",
+    path: "/parametres",
+    adminOnly: true,
+    icon: <Icon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />,
+  },
 ];
 
 const ROLE_LABELS = { admin: "Administrateur", manager: "Gestionnaire" };
@@ -102,6 +115,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [newRequests, setNewRequests] = useState(0);
+
+  // Nombre de demandes clients non traitées (pastille dans le menu)
+  useEffect(() => {
+    let active = true;
+    supabase
+      .from("booking_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "new")
+      .then(({ count }) => {
+        if (active) setNewRequests(count ?? 0);
+      });
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
+
+  const badge = (path: string) =>
+    path === "/demandes" && newRequests > 0 ? (
+      <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-bold text-white">
+        {newRequests}
+      </span>
+    ) : null;
 
   useEffect(() => {
     let active = true;
@@ -146,7 +182,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </span>
         </Link>
 
-        <nav className="flex-1 space-y-1 px-4 pt-6" aria-label="Navigation principale">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-4 pt-5" aria-label="Navigation principale">
           {items.map((item) => {
             const active = isActive(pathname, item.path);
             return (
@@ -154,7 +190,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.path}
                 href={item.path}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
+                className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition ${
                   active
                     ? "bg-blue-600 font-semibold text-white shadow-lg shadow-blue-950/30"
                     : "text-slate-300 hover:bg-white/10 hover:text-white"
@@ -162,6 +198,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               >
                 {item.icon}
                 {item.label}
+                {badge(item.path)}
               </Link>
             );
           })}
@@ -215,6 +252,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   {item.icon}
                   {item.label}
+                  {badge(item.path)}
                 </Link>
               );
             })}
@@ -252,7 +290,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               : "text-slate-500"
           }`}
         >
-          <Icon d="M5 12h.01M12 12h.01M19 12h.01" />
+          <span className="relative">
+            <Icon d="M5 12h.01M12 12h.01M19 12h.01" />
+            {newRequests > 0 && (
+              <span className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
+          </span>
           Plus
         </button>
       </nav>

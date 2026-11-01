@@ -51,6 +51,7 @@ const TABLE_LABELS: Record<string, string> = {
   space_rates: "Tarif",
   subscriptions: "Abonnement",
   space_photos: "Photo d'espace",
+  booking_requests: "Demande client",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -115,6 +116,12 @@ const FIELD_LABELS: Record<string, string> = {
   amenities: "Équipements",
   path: "Fichier",
   position: "Ordre",
+  desired_date: "Date souhaitée",
+  start_time: "De",
+  end_time: "À",
+  people: "Personnes",
+  message: "Message",
+  handled_by: "Traitée par",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -124,6 +131,10 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Terminée",
   expired: "Expirée",
   active: "Actif",
+  new: "Nouvelle",
+  contacted: "Client contacté",
+  converted: "Réservation créée",
+  declined: "Refusée",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -161,7 +172,9 @@ function formatValue(field: string, value: unknown) {
   }
   if (field === "paid_at") return formatDateTime(String(value));
   if (field === "booking_mode") return value === "seats" ? "Par place" : "Espace entier";
-  if (field === "time_from" || field === "time_to") return String(value).slice(0, 5);
+  if (["time_from", "time_to", "start_time", "end_time"].includes(field)) return String(value).slice(0, 5);
+  if (field === "desired_date") return new Date(`${String(value)}T00:00:00`).toLocaleDateString("fr-FR");
+  if (field === "handled_by") return `#${String(value).slice(0, 8)}`;
   if (field === "ends_on" || field === "start_month") {
     return new Date(`${String(value)}T00:00:00`).toLocaleDateString("fr-FR");
   }
