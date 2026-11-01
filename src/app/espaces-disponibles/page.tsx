@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { BrandMark } from "@/components/BrandMark";
+import { BrandLockup } from "@/components/BrandMark";
 import { spacePhotoUrl } from "@/lib/photos";
 import {
   AMENITY_LABELS,
@@ -66,11 +66,8 @@ export default function EspacesDisponiblesPage() {
     <div className="min-h-screen bg-[#f4f7fc] text-slate-900">
       {/* En-tête */}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-2.5">
-            <BrandMark size="md" letter={name} />
-            <span className="font-bold">{name}</span>
-          </div>
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:h-20 sm:px-6">
+          <BrandLockup size="md" name={<span className="font-bold">{name}</span>} />
           <Link
             href="/login"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
