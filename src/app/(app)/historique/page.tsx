@@ -122,6 +122,8 @@ const FIELD_LABELS: Record<string, string> = {
   people: "Personnes",
   message: "Message",
   handled_by: "Traitée par",
+  handled_at: "Traitée le",
+  decline_reason: "Motif du refus",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -175,6 +177,7 @@ function formatValue(field: string, value: unknown) {
   if (["time_from", "time_to", "start_time", "end_time"].includes(field)) return String(value).slice(0, 5);
   if (field === "desired_date") return new Date(`${String(value)}T00:00:00`).toLocaleDateString("fr-FR");
   if (field === "handled_by") return `#${String(value).slice(0, 8)}`;
+  if (field === "handled_at") return new Date(String(value)).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
   if (field === "ends_on" || field === "start_month") {
     return new Date(`${String(value)}T00:00:00`).toLocaleDateString("fr-FR");
   }

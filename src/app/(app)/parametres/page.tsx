@@ -16,6 +16,7 @@ type Settings = {
   email: string | null;
   address: string | null;
   public_requests_enabled: boolean;
+  payment_instructions: string | null;
   facebook_url: string | null;
   instagram_url: string | null;
   tiktok_url: string | null;
@@ -41,6 +42,7 @@ export default function ParametresPage() {
     email: "",
     address: "",
     public_requests_enabled: true,
+    payment_instructions: "",
     facebook_url: "",
     instagram_url: "",
     tiktok_url: "",
@@ -59,7 +61,7 @@ export default function ParametresPage() {
       supabase
         .from("app_settings")
         .select(
-          "coworking_name, tagline, whatsapp, phone, email, address, public_requests_enabled, facebook_url, instagram_url, tiktok_url, linkedin_url, youtube_url, x_url"
+          "coworking_name, tagline, whatsapp, phone, email, address, public_requests_enabled, payment_instructions, facebook_url, instagram_url, tiktok_url, linkedin_url, youtube_url, x_url"
         )
         .maybeSingle(),
     ]).then(([roleRes, settingsRes]) => {
@@ -84,6 +86,7 @@ export default function ParametresPage() {
         phone: d.phone ?? "",
         email: d.email ?? "",
         address: d.address ?? "",
+        payment_instructions: d.payment_instructions ?? "",
         facebook_url: d.facebook_url ?? "",
         instagram_url: d.instagram_url ?? "",
         tiktok_url: d.tiktok_url ?? "",
@@ -133,6 +136,7 @@ export default function ParametresPage() {
         email: clean(form.email),
         address: clean(form.address),
         public_requests_enabled: form.public_requests_enabled,
+        payment_instructions: clean(form.payment_instructions),
         ...socials,
         updated_at: new Date().toISOString(),
       })
@@ -281,6 +285,21 @@ export default function ParametresPage() {
                   />
                 </label>
               </div>
+
+              <label className="block text-sm">
+                <span className="mb-1 block font-medium">Instructions de paiement</span>
+                <textarea
+                  rows={2}
+                  maxLength={300}
+                  value={form.payment_instructions ?? ""}
+                  onChange={(e) => set("payment_instructions", e.target.value)}
+                  placeholder="Ex. Wave ou Orange Money au 77 000 00 00 (nom : Coworking Manager)"
+                  className={fieldClass}
+                />
+                <span className="mt-1 block text-xs text-slate-500">
+                  Ajoutées automatiquement au message de confirmation envoyé aux clients.
+                </span>
+              </label>
 
               <fieldset className="rounded-lg border border-slate-200 p-4">
                 <legend className="px-1 text-sm font-medium">Réseaux sociaux</legend>
