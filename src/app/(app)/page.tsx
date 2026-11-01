@@ -1,6 +1,7 @@
 
 "use client";
 
+import { COVER_IMAGE_URL } from "@/lib/public";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -342,7 +343,7 @@ export default function Home() {
             className="relative isolate overflow-hidden rounded-3xl bg-[#16294b] bg-cover bg-center px-6 py-8 text-white shadow-sm sm:px-9 sm:py-10"
             style={{
               backgroundImage:
-                "linear-gradient(90deg, rgba(15,29,55,.96) 0%, rgba(15,29,55,.84) 52%, rgba(15,29,55,.25) 100%), url('https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=85')",
+                `linear-gradient(90deg, rgba(15,29,55,.96) 0%, rgba(15,29,55,.84) 52%, rgba(15,29,55,.25) 100%), url('${COVER_IMAGE_URL}')`,
             }}
           >
             <div className="relative max-w-xl">
