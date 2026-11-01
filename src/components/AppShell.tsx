@@ -1,6 +1,6 @@
 "use client";
 
-import { BrandMark } from "@/components/BrandMark";
+import { BrandLockup } from "@/components/BrandMark";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -174,11 +174,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Menu latéral (ordinateur) */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-[#111c36] text-white lg:flex">
         <Link href="/" className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
-          <BrandMark size="lg" letter="C" />
-          <span>
-            <span className="block text-base font-bold tracking-wide">Coworking</span>
-            <span className="block text-[11px] tracking-[0.2em] text-slate-400">MANAGER</span>
-          </span>
+          <BrandLockup
+            size="lg"
+            surface="dark"
+            name={
+              <span>
+                <span className="block text-base font-bold tracking-wide">Coworking</span>
+                <span className="block text-[11px] tracking-[0.2em] text-slate-400">MANAGER</span>
+              </span>
+            }
+          />
         </Link>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-4 pt-5" aria-label="Navigation principale">
@@ -220,8 +225,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Barre du haut (téléphone et tablette) */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
         <Link href="/" className="flex items-center gap-2">
-          <BrandMark size="sm" letter="C" />
-          <span className="text-sm font-bold text-slate-900">Coworking Manager</span>
+          <BrandLockup size="sm" name={<span className="text-sm font-bold text-slate-900">Coworking Manager</span>} />
         </Link>
         <LogoutButton className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:opacity-50" />
       </header>

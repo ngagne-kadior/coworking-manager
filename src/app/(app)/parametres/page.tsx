@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
 import { normalizeSocial, PUBLIC_PATH, SOCIALS } from "@/lib/public";
 import { BRAND_BUCKET, prepareLogo, refreshBrand, useBrand } from "@/lib/brand";
-import { BrandMark } from "@/components/BrandMark";
+import { BrandLockup } from "@/components/BrandMark";
 
 type Settings = {
   coworking_name: string;
@@ -391,12 +391,14 @@ function LogoSection({ onMessage }: { onMessage: (m: { ok: boolean; text: string
 
   return (
     <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center">
-      <BrandMark size="xl" letter="C" />
+      <div className="flex h-16 min-w-[64px] shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3">
+        <BrandLockup size="lg" name={null} />
+      </div>
       <div className="flex-1">
         <h2 className="font-semibold">Logo du coworking</h2>
         <p className="mt-0.5 text-sm text-slate-500">
-          PNG de préférence (fond transparent), forme carrée. Affiché dans le menu, sur la page publique et la page de
-          connexion.
+          Logo horizontal ou carré, PNG de préférence (fond transparent). Les marges vides autour sont retirées
+          automatiquement.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
