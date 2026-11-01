@@ -201,17 +201,17 @@ export default function SpacesPage() {
         )}
 
         {/* Chiffres */}
-        <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <section className="mb-5 grid grid-cols-3 gap-3">
           {(
             [
               ["Espaces", String(spaces.length), "text-slate-900"],
               ["Espaces actifs", String(activeCount), "text-green-600"],
-              ["Capacité totale (actifs)", `${totalCapacity} pers.`, "text-blue-700"],
+              ["Capacité totale", `${totalCapacity} pers.`, "text-blue-700"],
             ] as const
           ).map(([label, value, color]) => (
-            <div key={label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">{label}</p>
-              <p className={`mt-2 text-3xl font-bold ${color}`}>{loading && spaces.length === 0 ? "—" : value}</p>
+            <div key={label} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+              <p className="text-[11px] leading-tight text-slate-500 sm:text-sm">{label}</p>
+              <p className={`mt-1 text-lg font-bold sm:text-2xl ${color}`}>{loading && spaces.length === 0 ? "—" : value}</p>
             </div>
           ))}
         </section>
@@ -247,7 +247,7 @@ export default function SpacesPage() {
               : "Aucun espace ne correspond à ta recherche."}
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {filtered.map((space) => {
               const cover = spacePhotoUrl(space.photo_path);
               const count = photosOf(space.id).length;
@@ -256,73 +256,55 @@ export default function SpacesPage() {
                 <article
                   key={space.id}
                   onClick={() => setDetailsId(space.id)}
-                  className={`cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md ${
+                  className={`group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                     space.is_active ? "" : "opacity-70"
                   }`}
                 >
-                  <div className="relative h-44 bg-gradient-to-br from-blue-50 to-slate-100">
+                  <div className="relative h-24 bg-gradient-to-br from-blue-50 to-slate-100 sm:h-28">
                     {cover ? (
                       // eslint-disable-next-line @next/next/no-img-element -- image Supabase Storage
                       <img src={cover} alt={`Photo de ${space.name}`} className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full items-center justify-center text-xs font-medium text-slate-400">
-                        Pas encore de photo
+                      <div className="flex h-full items-center justify-center text-[11px] font-medium text-slate-400">
+                        Pas de photo
                       </div>
                     )}
                     <span
-                      className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${
+                      className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm ${
                         space.is_active ? "bg-white/95 text-green-700" : "bg-slate-800/80 text-white"
                       }`}
                     >
                       {space.is_active ? "Actif" : "Inactif"}
                     </span>
-                    <span className="absolute right-3 top-3 rounded-full bg-slate-900/70 px-2.5 py-1 text-xs font-medium text-white">
-                      {count}/{MAX_SPACE_PHOTOS} photos
+                    <span className="absolute right-2 top-2 rounded-full bg-slate-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
+                      {count}/{MAX_SPACE_PHOTOS}
                     </span>
                   </div>
 
-                  <div className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="truncate font-semibold">{space.name}</h3>
-                        <p className="text-xs text-slate-500">
-                          {[space.space_type, space.location].filter(Boolean).join(" · ") || "Type non précisé"}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                        {space.booking_mode === "seats" ? `${space.capacity} places` : `${space.capacity} pers.`}
-                      </span>
-                    </div>
-
-                    <p className="mt-3 text-xs font-medium text-slate-700">
-                      {summary || <span className="font-normal text-slate-400">Aucun tarif défini</span>}
+                  <div className="flex flex-1 flex-col p-3">
+                    <h3 className="truncate text-sm font-semibold" title={space.name}>
+                      {space.name}
+                    </h3>
+                    <p className="truncate text-[11px] text-slate-500">
+                      {[space.space_type, space.location].filter(Boolean).join(" · ") || "Type non précisé"}
+                    </p>
+                    <p className="mt-1.5 truncate text-[11px] font-medium text-slate-700" title={summary || undefined}>
+                      {summary || <span className="font-normal text-slate-400">Aucun tarif</span>}
                     </p>
 
-                    {space.amenities.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {space.amenities.slice(0, 4).map((a) => (
-                          <span key={a} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-                            {amenityLabel(a)}
-                          </span>
-                        ))}
-                        {space.amenities.length > 4 && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-                            +{space.amenities.length - 4}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+                    <div className="mt-auto flex items-center justify-between gap-2 pt-2.5">
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                        {space.booking_mode === "seats" ? `${space.capacity} places` : `${space.capacity} pers.`}
+                      </span>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDetailsId(space.id);
                         }}
-                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
+                        className="text-[11px] font-semibold text-blue-700 hover:underline"
                       >
-                        Détails
+                        Détails →
                       </button>
                     </div>
                   </div>
