@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/AppShell";
 import { normalizeSocial, PUBLIC_PATH, SOCIALS } from "@/lib/public";
+import { BRAND_BUCKET, prepareLogo, refreshBrand, useBrand } from "@/lib/brand";
+import { BrandMark } from "@/components/BrandMark";
 
 type Settings = {
   coworking_name: string;
@@ -205,6 +207,8 @@ export default function ParametresPage() {
               </div>
             </section>
 
+            <LogoSection onMessage={setMessage} />
+
             {message && (
               <p
                 role={message.ok ? "status" : "alert"}
@@ -333,5 +337,98 @@ export default function ParametresPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ---------- Logo ----------
+
+function LogoSection({ onMessage }: { onMessage: (m: { ok: boolean; text: string } | null) => void }) {
+  const brand = useBrand();
+  const [busy, setBusy] = useState(false);
+
+  async function currentPath() {
+    const { data } = await supabase.from("app_settings").select("logo_path").eq("id", true).maybeSingle();
+    return (data?.logo_path as string | null | undefined) ?? null;
+  }
+
+  async function upload(file: File) {
+    onMessage(null);
+    setBusy(true);
+    try {
+      const blob = await prepareLogo(file);
+      const previous = await currentPath();
+      const path = `logo-${Date.now()}.png`;
+      const { error: upErr } = await supabase.storage
+        .from(BRAND_BUCKET)
+        .upload(path, blob, { contentType: "image/png", upsert: false });
+      if (upErr) throw new Error(`Envoi impossible : ${upErr.message}`);
+      const { error: dbErr } = await supabase.from("app_settings").update({ logo_path: path }).eq("id", true);
+      if (dbErr) {
+        await supabase.storage.from(BRAND_BUCKET).remove([path]);
+        throw new Error(`Enregistrement impossible : ${dbErr.message}`);
+      }
+      if (previous) await supabase.storage.from(BRAND_BUCKET).remove([previous]);
+      refreshBrand();
+      onMessage({ ok: true, text: "Logo mis à jour partout : menu, page publique et page de connexion." });
+    } catch (e) {
+      onMessage({ ok: false, text: e instanceof Error ? e.message : "Envoi du logo impossible." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeLogo() {
+    if (!window.confirm("Retirer le logo ? La lettre « C » reviendra à sa place.")) return;
+    onMessage(null);
+    setBusy(true);
+    const previous = await currentPath();
+    const { error } = await supabase.from("app_settings").update({ logo_path: null }).eq("id", true);
+    if (!error && previous) await supabase.storage.from(BRAND_BUCKET).remove([previous]);
+    setBusy(false);
+    refreshBrand();
+    onMessage(error ? { ok: false, text: `Suppression impossible : ${error.message}` } : { ok: true, text: "Logo retiré." });
+  }
+
+  return (
+    <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center">
+      <BrandMark size="xl" letter="C" />
+      <div className="flex-1">
+        <h2 className="font-semibold">Logo du coworking</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          PNG de préférence (fond transparent), forme carrée. Affiché dans le menu, sur la page publique et la page de
+          connexion.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <label
+          className={`cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 ${
+            busy ? "pointer-events-none opacity-60" : ""
+          }`}
+        >
+          {busy ? "Envoi..." : brand.logoUrl ? "Changer le logo" : "Ajouter un logo"}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void upload(file);
+            }}
+          />
+        </label>
+        {brand.logoUrl && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void removeLogo()}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Retirer
+          </button>
+        )}
+      </div>
+    </section>
   );
 }

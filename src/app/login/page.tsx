@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { BrandMark } from "@/components/BrandMark";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -72,6 +73,9 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
       <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
+        <div className="mb-5">
+          <BrandMark size="xl" letter="C" />
+        </div>
         <h1 className="text-3xl font-bold text-slate-900">
           Coworking Manager
         </h1>
